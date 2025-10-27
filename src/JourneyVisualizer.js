@@ -141,18 +141,16 @@ export class JourneyVisualizer {
     let minX = Infinity, minY = Infinity;
     let maxX = -Infinity, maxY = -Infinity;
 
-    // Position each step and track bounds
+    // First pass: track bounds
+    const positions = new Map();
     this.graph.nodes().forEach(nodeId => {
       const node = this.graph.node(nodeId);
-      const step = node.element;
 
       // Dagre gives center coordinates, convert to top-left
       const x = node.x - node.width / 2;
       const y = node.y - node.height / 2;
 
-      step.style.position = 'absolute';
-      step.style.left = `${x}px`;
-      step.style.top = `${y}px`;
+      positions.set(nodeId, { x, y });
 
       // Track bounds
       minX = Math.min(minX, x);
@@ -161,8 +159,33 @@ export class JourneyVisualizer {
       maxY = Math.max(maxY, y + node.height);
     });
 
-    // Size container with padding
-    const padding = 50;
+    // Calculate padding based on viewport size to allow centering any step
+    // Use viewport dimensions if available, otherwise fallback to reasonable default
+    const viewport = this.container.parentElement;
+    let padding = 50; // Minimum padding for aesthetics
+
+    if (viewport) {
+      // Add at least half the viewport dimensions as padding
+      // This ensures any step can be panned to the center
+      const viewportPadding = Math.max(viewport.clientWidth / 2, viewport.clientHeight / 2);
+      padding = Math.max(padding, viewportPadding);
+    }
+
+    // Second pass: position steps with padding offset
+    this.graph.nodes().forEach(nodeId => {
+      const node = this.graph.node(nodeId);
+      const step = node.element;
+      const pos = positions.get(nodeId);
+
+      // Shift by padding and normalize to container origin
+      const x = pos.x - minX + padding;
+      const y = pos.y - minY + padding;
+
+      step.style.position = 'absolute';
+      step.style.left = `${x}px`;
+      step.style.top = `${y}px`;
+    });
+
     const width = maxX - minX + padding * 2;
     const height = maxY - minY + padding * 2;
 
@@ -212,12 +235,20 @@ export class JourneyVisualizer {
   }
 
   _drawArrows() {
+    // Calculate offset to account for padding added in _positionSteps
+    const offsetX = -this.bounds.minX + this.bounds.padding;
+    const offsetY = -this.bounds.minY + this.bounds.padding;
+
     this.graph.edges().forEach(edgeObj => {
       const edge = this.graph.edge(edgeObj);
 
-      // Build SVG path from Dagre-computed points
+      // Build SVG path from Dagre-computed points, offset by padding
       const pathData = edge.points
-        .map((point, i) => `${i === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
+        .map((point, i) => {
+          const x = point.x + offsetX;
+          const y = point.y + offsetY;
+          return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+        })
         .join(' ');
 
       // Create arrow path
@@ -234,10 +265,12 @@ export class JourneyVisualizer {
       // Add label at midpoint if enabled
       if (this.options.arrows.showLabels && edge.label) {
         const midpoint = edge.points[Math.floor(edge.points.length / 2)];
+        const midX = midpoint.x + offsetX;
+        const midY = midpoint.y + offsetY;
 
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('x', midpoint.x);
-        text.setAttribute('y', midpoint.y);
+        text.setAttribute('x', midX);
+        text.setAttribute('y', midY);
         text.setAttribute('class', 'arrow-label');
         text.setAttribute('text-anchor', 'middle');
         text.setAttribute('dominant-baseline', 'middle');
@@ -249,8 +282,8 @@ export class JourneyVisualizer {
         // Add white background for readability
         const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         const bbox = text.getBBox ? { width: edge.label.length * 7, height: 16 } : { width: 50, height: 16 };
-        bgRect.setAttribute('x', midpoint.x - bbox.width / 2 - 4);
-        bgRect.setAttribute('y', midpoint.y - bbox.height / 2 - 2);
+        bgRect.setAttribute('x', midX - bbox.width / 2 - 4);
+        bgRect.setAttribute('y', midY - bbox.height / 2 - 2);
         bgRect.setAttribute('width', bbox.width + 8);
         bgRect.setAttribute('height', bbox.height + 4);
         bgRect.setAttribute('fill', 'white');
@@ -265,18 +298,79 @@ export class JourneyVisualizer {
   }
 
   _initializePanZoom() {
+    const viewport = this.container.parentElement;
+
     this.panzoomInstance = Panzoom(this.container, {
       maxScale: this.options.zoom.max,
       minScale: this.options.zoom.min,
       step: this.options.zoom.step,
-      canvas: true
+      origin: '0 0',  // Keep at 0,0 for consistent math
+      startX: 0,
+      startY: 0,
+      disablePan: false,
+      disableZoom: false,
+      panOnlyWhenZoomed: false,
+      contain: 'none'  // Disable all containment constraints
+    });
+
+    // Track if zoom is from wheel event
+    this._isWheelZoom = false;
+
+    // Listen for zoom changes to maintain viewport center
+    // Skip adjustment for wheel zooms (panzoom handles cursor-based zooming)
+    this.container.addEventListener('panzoomchange', (event) => {
+      if (event.detail && this._lastScale !== undefined && event.detail.scale !== this._lastScale) {
+        // Only adjust pan for programmatic zooms, not wheel zooms
+        if (!this._isWheelZoom) {
+          this._adjustPanForZoom(this._lastScale, event.detail.scale);
+        }
+      }
+      this._lastScale = event.detail ? event.detail.scale : 1;
+      // Reset wheel zoom flag after handling
+      this._isWheelZoom = false;
     });
 
     // Enable mouse wheel zoom on parent viewport
-    const viewport = this.container.parentElement;
     if (viewport) {
-      viewport.addEventListener('wheel', this.panzoomInstance.zoomWithWheel);
+      // Wrap zoomWithWheel to track wheel events
+      const wrappedZoomWithWheel = (event) => {
+        this._isWheelZoom = true;
+        this.panzoomInstance.zoomWithWheel(event);
+      };
+      viewport.addEventListener('wheel', wrappedZoomWithWheel);
     }
+
+    // Store initial scale
+    this._lastScale = 1;
+  }
+
+  _adjustPanForZoom(oldScale, newScale) {
+    const viewport = this.container.parentElement;
+    if (!viewport) return;
+
+    // Get current pan from transform
+    const transform = window.getComputedStyle(this.container).transform;
+    const matrix = transform.match(/matrix\((.+)\)/);
+    if (!matrix) return;
+
+    const values = matrix[1].split(', ');
+    const oldPanX = parseFloat(values[4]);
+    const oldPanY = parseFloat(values[5]);
+
+    // Calculate viewport center
+    const vpCenterX = viewport.clientWidth / 2;
+    const vpCenterY = viewport.clientHeight / 2;
+
+    // Find the container point that was at viewport center
+    const containerCenterX = (vpCenterX - oldPanX) / oldScale;
+    const containerCenterY = (vpCenterY - oldPanY) / oldScale;
+
+    // Calculate new pan to keep same container point at viewport center
+    const newPanX = vpCenterX - containerCenterX * newScale;
+    const newPanY = vpCenterY - containerCenterY * newScale;
+
+    // Apply the adjusted transform directly
+    this.container.style.transform = `matrix(${newScale}, 0, 0, ${newScale}, ${newPanX}, ${newPanY})`;
   }
 
   _findStartStep() {
@@ -308,13 +402,16 @@ export class JourneyVisualizer {
     const stepCenterY = startStep.offsetTop + startStep.offsetHeight / 2;
 
     // Calculate pan to center the step in the viewport at initial zoom
-    // Use initial zoom scale since we're setting zoom right after
+    // Use clientWidth/clientHeight to get viewport size excluding borders/scrollbars
     const scale = this.options.zoom.initial;
-    const x = (viewport.offsetWidth / 2) - (stepCenterX * scale);
-    const y = (viewport.offsetHeight / 2) - (stepCenterY * scale);
+    const x = (viewport.clientWidth / 2) - (stepCenterX * scale);
+    const y = (viewport.clientHeight / 2) - (stepCenterY * scale);
 
-    this.panzoomInstance.pan(x, y);
-    this.panzoomInstance.zoom(scale);
+    // Directly set the transform
+    this.container.style.transform = `matrix(${scale}, 0, 0, ${scale}, ${x}, ${y})`;
+
+    // Add highlight to starting step
+    startStep.classList.add('journey-step-current');
   }
 
   // Public API methods
@@ -337,8 +434,8 @@ export class JourneyVisualizer {
       return;
     }
 
-    // Get current scale to account for zoom level
-    const scale = this.panzoomInstance.getScale();
+    // Get current scale (or use specified zoom)
+    const scale = options.zoom || this.panzoomInstance.getScale();
 
     // Use offset positions (untransformed coordinates) instead of getBoundingClientRect
     const stepCenterX = step.offsetLeft + step.offsetWidth / 2;
@@ -346,21 +443,41 @@ export class JourneyVisualizer {
 
     // Calculate pan to center the step in the viewport
     // Account for current scale: when scaled, positions are multiplied by scale
-    const x = (viewport.offsetWidth / 2) - (stepCenterX * scale);
-    const y = (viewport.offsetHeight / 2) - (stepCenterY * scale);
+    // Use clientWidth/clientHeight to get viewport size excluding borders/scrollbars
+    const x = (viewport.clientWidth / 2) - (stepCenterX * scale);
+    const y = (viewport.clientHeight / 2) - (stepCenterY * scale);
 
-    this.panzoomInstance.pan(x, y, {
-      animate: options.animate !== undefined ? options.animate : true
-    });
+    // Apply animation if requested
+    const animate = options.animate !== undefined ? options.animate : true;
+    if (animate) {
+      this.container.style.transition = 'transform 0.3s ease-in-out';
+    }
 
-    if (options.zoom) {
-      this.panzoomInstance.zoom(options.zoom);
+    // Apply the transform directly to center the step
+    this.container.style.transform = `matrix(${scale}, 0, 0, ${scale}, ${x}, ${y})`;
+
+    if (animate) {
+      // Remove transition after animation completes
+      setTimeout(() => {
+        this.container.style.transition = '';
+      }, 300);
     }
 
     const previousStep = this.currentStep;
     this.currentStep = stepId;
 
-    // Add highlight if enabled
+    // Remove highlight from previous step
+    if (previousStep) {
+      const prevStepElement = document.getElementById(previousStep);
+      if (prevStepElement) {
+        prevStepElement.classList.remove('journey-step-current');
+      }
+    }
+
+    // Add persistent highlight to current step
+    step.classList.add('journey-step-current');
+
+    // Add temporary highlight animation if enabled
     if (this.options.navigation.highlightOnNavigate) {
       step.classList.add('journey-step-highlight');
       setTimeout(() => {
@@ -456,6 +573,9 @@ export class JourneyVisualizer {
 
       this._initializePanZoom();
       this._setupButtonHandlers();
+
+      // Wait for panzoom to fully initialize before navigating to start
+      await new Promise(resolve => setTimeout(resolve, 0));
       this._navigateToStart();
 
       this.currentStep = this._findStartStep().id;

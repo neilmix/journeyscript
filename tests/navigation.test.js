@@ -63,10 +63,9 @@ describe('Navigation', () => {
     visualizer._initializePanZoom();
     visualizer._navigateToStart();
 
-    expect(visualizer.panzoomInstance.pan).toHaveBeenCalled();
-    expect(visualizer.panzoomInstance.zoom).toHaveBeenCalledWith(
-      visualizer.options.zoom.initial
-    );
+    // Verify transform was set (implementation uses direct CSS transform now)
+    expect(visualizer.container.style.transform).toBeTruthy();
+    expect(visualizer.container.style.transform).toContain('matrix');
   });
 
   it('should navigate to specific step with navigateTo()', () => {
@@ -79,7 +78,8 @@ describe('Navigation', () => {
 
     visualizer.navigateTo('middle', { animate: true });
 
-    expect(visualizer.panzoomInstance.pan).toHaveBeenCalled();
+    // Verify transform was set (implementation uses direct CSS transform now)
+    expect(visualizer.container.style.transform).toBeTruthy();
   });
 
   it('should reset to start with reset()', () => {
@@ -92,7 +92,8 @@ describe('Navigation', () => {
 
     visualizer.reset();
 
-    expect(visualizer.panzoomInstance.pan).toHaveBeenCalled();
+    // Verify transform was set (implementation uses direct CSS transform now)
+    expect(visualizer.container.style.transform).toBeTruthy();
   });
 
   it('should get current state with getState()', () => {

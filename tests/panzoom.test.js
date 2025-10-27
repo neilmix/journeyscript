@@ -38,7 +38,7 @@ describe('Pan/Zoom', () => {
       expect.objectContaining({
         maxScale: 3,
         minScale: 0.1,
-        canvas: true
+        step: 0.1
       })
     );
   });
