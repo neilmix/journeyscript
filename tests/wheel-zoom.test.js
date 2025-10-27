@@ -19,25 +19,78 @@ vi.mock('@panzoom/panzoom', () => ({
     let currentPanY = 0;
 
     return {
-      pan: vi.fn((x, y) => {
-        currentPanX = x;
-        currentPanY = y;
-        element.style.transform = `matrix(${currentScale}, 0, 0, ${currentScale}, ${x}, ${y})`;
-      }),
-      zoom: vi.fn((scale) => {
-        currentScale = scale;
-        element.style.transform = `matrix(${scale}, 0, 0, ${scale}, ${currentPanX}, ${currentPanY})`;
-      }),
-      zoomWithWheel: vi.fn((event) => {
-        // Simulate the BUGGY behavior: zoom changes but pan doesn't compensate correctly
-        // This simulates what the actual panzoom library appears to be doing
-        const delta = -event.deltaY;
-        const scaleChange = delta > 0 ? 0.1 : -0.1;
-        const newScale = Math.max(0.1, Math.min(3, currentScale + scaleChange));
+      pan: vi.fn((x, y, options) => {
+        if (options && options.relative === false) {
+          // Absolute positioning
+          currentPanX = x;
+          currentPanY = y;
+        } else {
+          // Relative positioning (default)
+          currentPanX += x;
+          currentPanY += y;
+        }
+        element.style.transform = `matrix(${currentScale}, 0, 0, ${currentScale}, ${currentPanX}, ${currentPanY})`;
 
-        // BUG: This simple zoom doesn't account for cursor position
-        // It just zooms from the origin (0,0) which causes drift
+        // Trigger panzoomchange event
+        const changeEvent = new CustomEvent('panzoomchange', {
+          detail: { scale: currentScale, x: currentPanX, y: currentPanY }
+        });
+        element.dispatchEvent(changeEvent);
+      }),
+      zoom: vi.fn((scale, options) => {
+        const oldScale = currentScale;
+        currentScale = scale;
+
+        // Handle focal point zooming if provided
+        if (options && options.focal) {
+          // Calculate the container point at the focal position
+          const containerX = (options.focal.x - currentPanX) / oldScale;
+          const containerY = (options.focal.y - currentPanY) / oldScale;
+
+          // Calculate new pan to keep that point at the focal position
+          currentPanX = options.focal.x - containerX * currentScale;
+          currentPanY = options.focal.y - containerY * currentScale;
+        }
+
+        element.style.transform = `matrix(${currentScale}, 0, 0, ${currentScale}, ${currentPanX}, ${currentPanY})`;
+
+        // Trigger panzoomchange event
+        const changeEvent = new CustomEvent('panzoomchange', {
+          detail: { scale: currentScale, x: currentPanX, y: currentPanY }
+        });
+        element.dispatchEvent(changeEvent);
+      }),
+      zoomWithWheel: vi.fn((event, options) => {
+        // Properly implement zoomWithWheel with focal point zooming
+        const delta = -event.deltaY;
+        const step = options?.step || 0.1;
+        const scaleChange = delta > 0 ? step : -step;
+        const newScale = Math.max(
+          options?.minScale || 0.1,
+          Math.min(options?.maxScale || 3, currentScale + scaleChange)
+        );
+
+        if (newScale === currentScale) return;
+
+        // Get focal point from event (cursor position)
+        const parent = element.parentElement;
+        const parentRect = parent.getBoundingClientRect();
+        const focalX = event.clientX - parentRect.left;
+        const focalY = event.clientY - parentRect.top;
+
+        // Calculate container point at focal position
+        const containerX = (focalX - currentPanX) / currentScale;
+        const containerY = (focalY - currentPanY) / currentScale;
+
+        // Calculate new pan to keep that point at focal position
+        const newPanX = focalX - containerX * newScale;
+        const newPanY = focalY - containerY * newScale;
+
+        // Update state
         currentScale = newScale;
+        currentPanX = newPanX;
+        currentPanY = newPanY;
+
         element.style.transform = `matrix(${currentScale}, 0, 0, ${currentScale}, ${currentPanX}, ${currentPanY})`;
 
         // Trigger panzoomchange event
