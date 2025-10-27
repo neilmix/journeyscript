@@ -204,4 +204,57 @@ export class JourneyVisualizer {
     this.container.appendChild(svg);
     this.svgOverlay = svg;
   }
+
+  _drawArrows() {
+    this.graph.edges().forEach(edgeObj => {
+      const edge = this.graph.edge(edgeObj);
+
+      // Build SVG path from Dagre-computed points
+      const pathData = edge.points
+        .map((point, i) => `${i === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
+        .join(' ');
+
+      // Create arrow path
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', pathData);
+      path.setAttribute('class', 'journey-arrow');
+      path.setAttribute('marker-end', 'url(#arrowhead)');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', this.options.arrows.color);
+      path.setAttribute('stroke-width', this.options.arrows.width);
+
+      this.svgOverlay.appendChild(path);
+
+      // Add label at midpoint if enabled
+      if (this.options.arrows.showLabels && edge.label) {
+        const midpoint = edge.points[Math.floor(edge.points.length / 2)];
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', midpoint.x);
+        text.setAttribute('y', midpoint.y);
+        text.setAttribute('class', 'arrow-label');
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('fill', this.options.arrows.color);
+        text.setAttribute('font-size', '12px');
+        text.setAttribute('font-family', 'system-ui, sans-serif');
+        text.textContent = edge.label;
+
+        // Add white background for readability
+        const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        const bbox = text.getBBox ? { width: edge.label.length * 7, height: 16 } : { width: 50, height: 16 };
+        bgRect.setAttribute('x', midpoint.x - bbox.width / 2 - 4);
+        bgRect.setAttribute('y', midpoint.y - bbox.height / 2 - 2);
+        bgRect.setAttribute('width', bbox.width + 8);
+        bgRect.setAttribute('height', bbox.height + 4);
+        bgRect.setAttribute('fill', 'white');
+        bgRect.setAttribute('stroke', '#ccc');
+        bgRect.setAttribute('stroke-width', '1');
+        bgRect.setAttribute('rx', '3');
+
+        this.svgOverlay.appendChild(bgRect);
+        this.svgOverlay.appendChild(text);
+      }
+    });
+  }
 }
