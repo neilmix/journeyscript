@@ -422,4 +422,72 @@ export class JourneyVisualizer {
     }
     this.eventHandlers[eventName].forEach(callback => callback(data));
   }
+
+  // Main initialization method
+  async init() {
+    try {
+      console.time('journey-init');
+
+      // Wait for fonts and images to load for accurate measurements
+      await this._waitForContentReady();
+
+      // Step-by-step initialization
+      this._discoverSteps();
+      this._buildGraph();
+      this._computeLayout();
+      this._positionSteps();
+
+      const width = parseInt(this.container.style.width);
+      const height = parseInt(this.container.style.height);
+      this._createSvgOverlay(width, height);
+      this._drawArrows();
+
+      this._initializePanZoom();
+      this._setupButtonHandlers();
+      this._navigateToStart();
+
+      this.currentStep = this._findStartStep().id;
+
+      console.timeEnd('journey-init');
+      this._emit('layout-complete');
+
+      return this;
+    } catch (error) {
+      console.error('Initialization failed:', error);
+      throw error;
+    }
+  }
+
+  async _waitForContentReady() {
+    // Wait for fonts
+    if (document.fonts && document.fonts.ready) {
+      await document.fonts.ready;
+    }
+
+    // Wait for images
+    const images = Array.from(this.container.querySelectorAll('img'))
+      .filter(img => !img.complete);
+
+    if (images.length > 0) {
+      await Promise.all(
+        images.map(img => new Promise(resolve => {
+          img.onload = resolve;
+          img.onerror = resolve; // Continue even if image fails
+        }))
+      );
+    }
+  }
+
+  _setupButtonHandlers() {
+    const buttons = this.container.querySelectorAll('[data-dest]');
+
+    buttons.forEach(button => {
+      button.addEventListener('click', (e) => {
+        const destId = button.getAttribute('data-dest');
+        if (destId) {
+          this.navigateTo(destId, { animate: true });
+        }
+      });
+    });
+  }
 }
