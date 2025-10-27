@@ -7,7 +7,8 @@ vi.mock('@panzoom/panzoom', () => ({
     pan: vi.fn(),
     zoom: vi.fn(),
     zoomWithWheel: vi.fn(),
-    destroy: vi.fn()
+    destroy: vi.fn(),
+    getScale: vi.fn(() => 1) // Default scale of 1
   }))
 }));
 

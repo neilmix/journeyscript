@@ -307,12 +307,14 @@ export class JourneyVisualizer {
     const stepCenterX = startStep.offsetLeft + startStep.offsetWidth / 2;
     const stepCenterY = startStep.offsetTop + startStep.offsetHeight / 2;
 
-    // Calculate pan to center the step in the viewport
-    const x = (viewport.offsetWidth / 2) - stepCenterX;
-    const y = (viewport.offsetHeight / 2) - stepCenterY;
+    // Calculate pan to center the step in the viewport at initial zoom
+    // Use initial zoom scale since we're setting zoom right after
+    const scale = this.options.zoom.initial;
+    const x = (viewport.offsetWidth / 2) - (stepCenterX * scale);
+    const y = (viewport.offsetHeight / 2) - (stepCenterY * scale);
 
     this.panzoomInstance.pan(x, y);
-    this.panzoomInstance.zoom(this.options.zoom.initial);
+    this.panzoomInstance.zoom(scale);
   }
 
   // Public API methods
@@ -335,13 +337,17 @@ export class JourneyVisualizer {
       return;
     }
 
+    // Get current scale to account for zoom level
+    const scale = this.panzoomInstance.getScale();
+
     // Use offset positions (untransformed coordinates) instead of getBoundingClientRect
     const stepCenterX = step.offsetLeft + step.offsetWidth / 2;
     const stepCenterY = step.offsetTop + step.offsetHeight / 2;
 
     // Calculate pan to center the step in the viewport
-    const x = (viewport.offsetWidth / 2) - stepCenterX;
-    const y = (viewport.offsetHeight / 2) - stepCenterY;
+    // Account for current scale: when scaled, positions are multiplied by scale
+    const x = (viewport.offsetWidth / 2) - (stepCenterX * scale);
+    const y = (viewport.offsetHeight / 2) - (stepCenterY * scale);
 
     this.panzoomInstance.pan(x, y, {
       animate: options.animate !== undefined ? options.animate : true
