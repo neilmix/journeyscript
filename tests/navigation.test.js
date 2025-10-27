@@ -65,10 +65,7 @@ describe('Navigation', () => {
 
     // Verify transform was set (implementation uses direct CSS transform now)
     expect(visualizer.container.style.transform).toBeTruthy();
-    expect(visualizer.panzoomInstance.zoom).toHaveBeenCalledWith(
-      visualizer.options.zoom.initial,
-      { animate: false }
-    );
+    expect(visualizer.container.style.transform).toContain('matrix');
   });
 
   it('should navigate to specific step with navigateTo()', () => {
