@@ -1063,11 +1063,16 @@
     </div>
   </div>
 
-  <script type="module">
-    import { JourneyVisualizer } from '../src/index.js';
+  <!-- Load dependencies from CDN -->
+  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://unpkg.com/@panzoom/panzoom@4.5.1/dist/panzoom.min.js"></script>
 
+  <!-- Load our UMD bundle -->
+  <script src="../dist/journey-visualizer.umd.js"></script>
+
+  <script>
     console.time('init-150-steps');
-    const visualizer = new JourneyVisualizer('.journey-container');
+    const visualizer = new JourneyVisualizer.JourneyVisualizer('.journey-container');
     visualizer.init().then(() => {
       console.timeEnd('init-150-steps');
     });
