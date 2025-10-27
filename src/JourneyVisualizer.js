@@ -473,6 +473,9 @@ export class JourneyVisualizer {
 
       this._initializePanZoom();
       this._setupButtonHandlers();
+
+      // Wait for panzoom to fully initialize before navigating to start
+      await new Promise(resolve => setTimeout(resolve, 0));
       this._navigateToStart();
 
       this.currentStep = this._findStartStep().id;
