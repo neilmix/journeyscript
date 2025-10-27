@@ -1,0 +1,28 @@
+{
+  "name": "journey-visualizer",
+  "version": "0.1.0",
+  "description": "Interactive UX journey visualization engine",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "rollup -c",
+    "dev": "vite"
+  },
+  "keywords": ["visualization", "journey", "graph", "ux"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "dagre": "^0.8.5",
+    "@panzoom/panzoom": "^4.5.1"
+  },
+  "devDependencies": {
+    "vitest": "^1.0.0",
+    "jsdom": "^23.0.0",
+    "vite": "^5.0.0",
+    "rollup": "^4.0.0",
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "@rollup/plugin-commonjs": "^25.0.0"
+  }
+}
