@@ -310,4 +310,116 @@ export class JourneyVisualizer {
     this.panzoomInstance.pan(x, y);
     this.panzoomInstance.zoom(this.options.zoom.initial);
   }
+
+  // Public API methods
+  navigateTo(stepId, options = {}) {
+    const step = document.getElementById(stepId);
+
+    if (!step) {
+      console.warn(`Step not found: ${stepId}`);
+      return;
+    }
+
+    if (!this.panzoomInstance) {
+      console.warn('Panzoom not initialized');
+      return;
+    }
+
+    const rect = step.getBoundingClientRect();
+    const containerRect = this.container.getBoundingClientRect();
+    const viewport = this.container.parentElement;
+
+    if (!viewport) {
+      return;
+    }
+
+    const viewportRect = viewport.getBoundingClientRect();
+
+    const x = (viewportRect.width / 2) - (rect.left - containerRect.left + rect.width / 2);
+    const y = (viewportRect.height / 2) - (rect.top - containerRect.top + rect.height / 2);
+
+    this.panzoomInstance.pan(x, y, {
+      animate: options.animate !== undefined ? options.animate : true
+    });
+
+    if (options.zoom) {
+      this.panzoomInstance.zoom(options.zoom);
+    }
+
+    this.currentStep = stepId;
+
+    // Add highlight if enabled
+    if (this.options.navigation.highlightOnNavigate) {
+      step.classList.add('journey-step-highlight');
+      setTimeout(() => {
+        step.classList.remove('journey-step-highlight');
+      }, 1000);
+    }
+
+    // Emit navigate event
+    this._emit('navigate', { from: this.currentStep, to: stepId });
+  }
+
+  reset() {
+    this._navigateToStart();
+  }
+
+  refresh() {
+    // Re-measure and re-layout
+    this._buildGraph();
+    this._computeLayout();
+    this._positionSteps();
+
+    // Redraw arrows
+    if (this.svgOverlay) {
+      this.svgOverlay.innerHTML = '';
+      this._createSvgOverlay(
+        parseInt(this.container.style.width),
+        parseInt(this.container.style.height)
+      );
+    }
+    this._drawArrows();
+
+    this._emit('layout-complete');
+  }
+
+  getState() {
+    return {
+      currentStep: this.currentStep,
+      totalSteps: this.steps.length,
+      scale: this.panzoomInstance ? this.panzoomInstance.getScale() : 1,
+      pan: this.panzoomInstance ? this.panzoomInstance.getPan() : { x: 0, y: 0 }
+    };
+  }
+
+  destroy() {
+    if (this.panzoomInstance) {
+      this.panzoomInstance.destroy();
+      this.panzoomInstance = null;
+    }
+
+    if (this.svgOverlay && this.svgOverlay.parentNode) {
+      this.svgOverlay.parentNode.removeChild(this.svgOverlay);
+    }
+
+    this._emit('destroy');
+  }
+
+  // Event system
+  on(eventName, callback) {
+    if (!this.eventHandlers) {
+      this.eventHandlers = {};
+    }
+    if (!this.eventHandlers[eventName]) {
+      this.eventHandlers[eventName] = [];
+    }
+    this.eventHandlers[eventName].push(callback);
+  }
+
+  _emit(eventName, data) {
+    if (!this.eventHandlers || !this.eventHandlers[eventName]) {
+      return;
+    }
+    this.eventHandlers[eventName].forEach(callback => callback(data));
+  }
 }

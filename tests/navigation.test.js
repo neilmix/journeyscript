@@ -67,4 +67,51 @@ describe('Navigation', () => {
       visualizer.options.zoom.initial
     );
   });
+
+  it('should navigate to specific step with navigateTo()', () => {
+    const visualizer = new JourneyVisualizer('.journey-container');
+    visualizer._discoverSteps();
+    visualizer._buildGraph();
+    visualizer._computeLayout();
+    visualizer._positionSteps();
+    visualizer._initializePanZoom();
+
+    visualizer.navigateTo('middle', { animate: true });
+
+    expect(visualizer.panzoomInstance.pan).toHaveBeenCalled();
+  });
+
+  it('should reset to start with reset()', () => {
+    const visualizer = new JourneyVisualizer('.journey-container');
+    visualizer._discoverSteps();
+    visualizer._buildGraph();
+    visualizer._computeLayout();
+    visualizer._positionSteps();
+    visualizer._initializePanZoom();
+
+    visualizer.reset();
+
+    expect(visualizer.panzoomInstance.pan).toHaveBeenCalled();
+  });
+
+  it('should get current state with getState()', () => {
+    const visualizer = new JourneyVisualizer('.journey-container');
+    visualizer.currentStep = 'start';
+
+    const state = visualizer.getState();
+
+    expect(state).toHaveProperty('currentStep', 'start');
+    expect(state).toHaveProperty('totalSteps');
+  });
+
+  it('should destroy panzoom instance with destroy()', () => {
+    const visualizer = new JourneyVisualizer('.journey-container');
+    visualizer._discoverSteps();
+    visualizer._initializePanZoom();
+
+    const panzoomInstance = visualizer.panzoomInstance;
+    visualizer.destroy();
+
+    expect(panzoomInstance.destroy).toHaveBeenCalled();
+  });
 });
