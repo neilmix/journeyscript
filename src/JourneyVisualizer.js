@@ -269,7 +269,8 @@ export class JourneyVisualizer {
       maxScale: this.options.zoom.max,
       minScale: this.options.zoom.min,
       step: this.options.zoom.step,
-      canvas: true
+      canvas: true,
+      contain: 'outside'  // Allow panning beyond bounds for proper centering
     });
 
     // Enable mouse wheel zoom on parent viewport
@@ -309,9 +310,10 @@ export class JourneyVisualizer {
 
     // Calculate pan to center the step in the viewport at initial zoom
     // Use initial zoom scale since we're setting zoom right after
+    // Use clientWidth/clientHeight to get viewport size excluding borders/scrollbars
     const scale = this.options.zoom.initial;
-    const x = (viewport.offsetWidth / 2) - (stepCenterX * scale);
-    const y = (viewport.offsetHeight / 2) - (stepCenterY * scale);
+    const x = (viewport.clientWidth / 2) - (stepCenterX * scale);
+    const y = (viewport.clientHeight / 2) - (stepCenterY * scale);
 
     this.panzoomInstance.pan(x, y);
     this.panzoomInstance.zoom(scale);
@@ -349,8 +351,9 @@ export class JourneyVisualizer {
 
     // Calculate pan to center the step in the viewport
     // Account for current scale: when scaled, positions are multiplied by scale
-    const x = (viewport.offsetWidth / 2) - (stepCenterX * scale);
-    const y = (viewport.offsetHeight / 2) - (stepCenterY * scale);
+    // Use clientWidth/clientHeight to get viewport size excluding borders/scrollbars
+    const x = (viewport.clientWidth / 2) - (stepCenterX * scale);
+    const y = (viewport.clientHeight / 2) - (stepCenterY * scale);
 
     this.panzoomInstance.pan(x, y, {
       animate: options.animate !== undefined ? options.animate : true
