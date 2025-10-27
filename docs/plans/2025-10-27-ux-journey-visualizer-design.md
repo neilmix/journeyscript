@@ -484,6 +484,104 @@ journey.on('layout-complete', () => {
   - ES6+ (or transpile)
   - getBoundingClientRect
 
+## Testing Strategy
+
+**Approach:** Pragmatic testing with automated integration tests and manual visual validation
+
+### Automated Tests (Jest/Vitest + jsdom)
+
+**Core logic tests:**
+- Graph building from DOM structure
+- ID validation (missing, duplicates)
+- Edge validation (invalid destinations)
+- Coordinate transformations
+- Error handling paths
+
+**Integration tests:**
+- Full initialization with valid HTML
+- Graph construction from various structures (linear, branching, loops)
+- Navigation API (`navigateTo`, `reset`, `refresh`)
+- Event emission (`navigate`, `layout-complete`)
+- Options/configuration handling
+- Cleanup/destroy functionality
+
+**Test data fixtures:**
+```javascript
+// fixtures/simple-journey.html - 3 steps, linear
+// fixtures/branching-journey.html - 10 steps, multiple paths
+// fixtures/complex-journey.html - 30 steps with loops
+// fixtures/invalid-journey.html - various error cases
+```
+
+### Example HTML Files for Manual Testing
+
+**Development examples:**
+1. **`examples/simple.html`** - Basic 3-5 step linear flow
+   - Verify: Basic layout, arrow drawing, navigation
+
+2. **`examples/branching.html`** - 10-15 steps with branches
+   - Verify: Multiple paths, arrow labels, visual spacing
+
+3. **`examples/complex.html`** - 30-50 steps with loops
+   - Verify: Loop handling, back edges, overall layout quality
+
+4. **`examples/stress.html`** - 100-150 steps
+   - Verify: Performance targets, pan/zoom smoothness
+
+5. **`examples/edge-cases.html`** - Various edge cases
+   - Missing start, orphaned nodes, long labels, varying step sizes
+
+### Manual Validation Checklist
+
+For each example file, validate:
+- [ ] Layout computed without errors
+- [ ] Steps positioned without overlap (or minimal overlap)
+- [ ] Arrows drawn correctly with proper arrowheads
+- [ ] Arrow labels readable and positioned well
+- [ ] Pan/zoom is smooth and responsive
+- [ ] Click navigation works and animates smoothly
+- [ ] Initial zoom to start step works
+- [ ] Performance meets targets (check console.time logs)
+- [ ] Works in Chrome
+- [ ] Works in Safari
+
+### Performance Benchmarks
+
+Simple performance measurement script:
+```javascript
+// benchmarks/layout-performance.js
+// Generates graphs of various sizes and measures:
+// - Graph construction time
+// - Dagre layout time
+// - DOM positioning time
+// - SVG rendering time
+// - Total initialization time
+
+// Run with: node benchmarks/layout-performance.js
+// Output: CSV with timings for 10, 50, 100, 150 node graphs
+```
+
+**Target metrics:**
+- 10 nodes: < 20ms total
+- 50 nodes: < 50ms total
+- 100 nodes: < 100ms total
+- 150 nodes: < 200ms total
+
+### Test Coverage Goals
+
+- **Unit/Integration tests:** 80%+ coverage of core logic
+- **Manual validation:** All example files pass checklist
+- **Browser compatibility:** Chrome and Safari validated
+- **Performance:** All benchmarks meet targets
+
+### Future Testing Enhancements (Out of Scope)
+
+- Visual regression testing (Playwright + screenshot comparison)
+- Automated browser testing (Playwright/Puppeteer)
+- CI/CD integration
+- Cross-browser testing matrix (Firefox, Edge)
+- Accessibility testing (keyboard navigation, screen readers)
+
 ## Future Enhancements (Out of Scope)
 
 - Export to image/PDF
