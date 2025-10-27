@@ -1,0 +1,41 @@
+<!-- examples/simple.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple Journey - Journey Visualizer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="journey-viewport">
+    <div class="journey-container">
+      <div class="step" id="start" data-place="start">
+        <h2>Welcome</h2>
+        <p>This is the starting point of your journey.</p>
+        <button data-dest="step2">Get Started</button>
+      </div>
+
+      <div class="step" id="step2">
+        <h2>Step 2</h2>
+        <p>You're making progress!</p>
+        <button data-dest="step3">Continue</button>
+        <button data-dest="start">Go Back</button>
+      </div>
+
+      <div class="step" id="step3">
+        <h2>Complete</h2>
+        <p>You've reached the end.</p>
+        <button data-dest="start">Restart</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JourneyVisualizer } from '../src/index.js';
+
+    const visualizer = new JourneyVisualizer('.journey-container');
+    visualizer.init();
+  </script>
+</body>
+</html>

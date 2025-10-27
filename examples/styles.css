@@ -1,0 +1,61 @@
+/* examples/styles.css */
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.journey-viewport {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+  background: #f5f5f5;
+}
+
+.journey-container {
+  position: relative;
+}
+
+.step {
+  background: white;
+  border: 2px solid #333;
+  border-radius: 8px;
+  padding: 20px;
+  min-width: 200px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.step h2 {
+  margin: 0 0 10px 0;
+  font-size: 18px;
+}
+
+.step p {
+  margin: 0 0 15px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.step button {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: 8px;
+  font-size: 14px;
+}
+
+.step button:hover {
+  background: #0056b3;
+}
+
+.journey-step-highlight {
+  animation: highlight 1s ease-in-out;
+}
+
+@keyframes highlight {
+  0%, 100% { background: white; }
+  50% { background: #fffacd; }
+}

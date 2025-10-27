@@ -1,0 +1,77 @@
+<!-- examples/branching.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Branching Journey - Journey Visualizer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="journey-viewport">
+    <div class="journey-container">
+      <div class="step" id="landing" data-place="start">
+        <h2>Landing Page</h2>
+        <p>Choose your path</p>
+        <button data-dest="signup">Sign Up</button>
+        <button data-dest="login">Log In</button>
+      </div>
+
+      <div class="step" id="signup">
+        <h2>Sign Up</h2>
+        <p>Create a new account</p>
+        <button data-dest="verification">Submit</button>
+        <button data-dest="landing">Cancel</button>
+      </div>
+
+      <div class="step" id="login">
+        <h2>Log In</h2>
+        <p>Enter credentials</p>
+        <button data-dest="dashboard">Log In</button>
+        <button data-dest="forgot">Forgot Password</button>
+      </div>
+
+      <div class="step" id="verification">
+        <h2>Email Verification</h2>
+        <p>Check your email</p>
+        <button data-dest="dashboard">Verify</button>
+      </div>
+
+      <div class="step" id="forgot">
+        <h2>Reset Password</h2>
+        <p>Enter email</p>
+        <button data-dest="login">Reset</button>
+      </div>
+
+      <div class="step" id="dashboard">
+        <h2>Dashboard</h2>
+        <p>Welcome!</p>
+        <button data-dest="profile">Profile</button>
+        <button data-dest="settings">Settings</button>
+        <button data-dest="landing">Log Out</button>
+      </div>
+
+      <div class="step" id="profile">
+        <h2>Profile</h2>
+        <p>Your profile</p>
+        <button data-dest="dashboard">Back</button>
+      </div>
+
+      <div class="step" id="settings">
+        <h2>Settings</h2>
+        <p>Preferences</p>
+        <button data-dest="dashboard">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JourneyVisualizer } from '../src/index.js';
+
+    const visualizer = new JourneyVisualizer('.journey-container', {
+      layout: { direction: 'TB' }
+    });
+    visualizer.init();
+  </script>
+</body>
+</html>
