@@ -297,20 +297,19 @@ export class JourneyVisualizer {
       return;
     }
 
-    // Get step position and size
-    const rect = startStep.getBoundingClientRect();
-    const containerRect = this.container.getBoundingClientRect();
     const viewport = this.container.parentElement;
 
     if (!viewport) {
       return;
     }
 
-    const viewportRect = viewport.getBoundingClientRect();
+    // Use offset positions (untransformed coordinates) instead of getBoundingClientRect
+    const stepCenterX = startStep.offsetLeft + startStep.offsetWidth / 2;
+    const stepCenterY = startStep.offsetTop + startStep.offsetHeight / 2;
 
-    // Calculate center position
-    const x = (viewportRect.width / 2) - (rect.left - containerRect.left + rect.width / 2);
-    const y = (viewportRect.height / 2) - (rect.top - containerRect.top + rect.height / 2);
+    // Calculate pan to center the step in the viewport
+    const x = (viewport.offsetWidth / 2) - stepCenterX;
+    const y = (viewport.offsetHeight / 2) - stepCenterY;
 
     this.panzoomInstance.pan(x, y);
     this.panzoomInstance.zoom(this.options.zoom.initial);
@@ -330,18 +329,19 @@ export class JourneyVisualizer {
       return;
     }
 
-    const rect = step.getBoundingClientRect();
-    const containerRect = this.container.getBoundingClientRect();
     const viewport = this.container.parentElement;
 
     if (!viewport) {
       return;
     }
 
-    const viewportRect = viewport.getBoundingClientRect();
+    // Use offset positions (untransformed coordinates) instead of getBoundingClientRect
+    const stepCenterX = step.offsetLeft + step.offsetWidth / 2;
+    const stepCenterY = step.offsetTop + step.offsetHeight / 2;
 
-    const x = (viewportRect.width / 2) - (rect.left - containerRect.left + rect.width / 2);
-    const y = (viewportRect.height / 2) - (rect.top - containerRect.top + rect.height / 2);
+    // Calculate pan to center the step in the viewport
+    const x = (viewport.offsetWidth / 2) - stepCenterX;
+    const y = (viewport.offsetHeight / 2) - stepCenterY;
 
     this.panzoomInstance.pan(x, y, {
       animate: options.animate !== undefined ? options.animate : true

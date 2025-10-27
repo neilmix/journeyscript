@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zoom Navigation Test - Journey Visualizer</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    #controls {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: white;
+      border: 2px solid #333;
+      padding: 15px;
+      z-index: 10000;
+      font-family: system-ui, sans-serif;
+    }
+    #controls button {
+      display: block;
+      margin: 5px 0;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    #controls .zoom-level {
+      font-weight: bold;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <div class="zoom-level">Zoom: <span id="zoom-display">1.0</span></div>
+    <button id="zoom-in">Zoom In (+)</button>
+    <button id="zoom-out">Zoom Out (-)</button>
+    <button id="reset-zoom">Reset Zoom</button>
+    <hr>
+    <button id="nav-step1">Navigate to Welcome</button>
+    <button id="nav-step2">Navigate to Step 2</button>
+    <button id="nav-step3">Navigate to Complete</button>
+  </div>
+
+  <div class="journey-viewport">
+    <div class="journey-container">
+      <div class="step" id="start" data-place="start">
+        <h2>Welcome</h2>
+        <p>This is the starting point of your journey.</p>
+        <button data-dest="step2">Get Started</button>
+      </div>
+
+      <div class="step" id="step2">
+        <h2>Step 2</h2>
+        <p>You're making progress!</p>
+        <button data-dest="step3">Continue</button>
+        <button data-dest="start">Go Back</button>
+      </div>
+
+      <div class="step" id="step3">
+        <h2>Complete</h2>
+        <p>You've reached the end.</p>
+        <button data-dest="start">Restart</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://unpkg.com/@panzoom/panzoom@4.5.1/dist/panzoom.min.js"></script>
+  <script src="../dist/journey-visualizer.umd.js"></script>
+
+  <script>
+    const visualizer = new JourneyVisualizer.JourneyVisualizer('.journey-container');
+    visualizer.init();
+
+    const zoomDisplay = document.getElementById('zoom-display');
+    const container = document.querySelector('.journey-container');
+    const viewport = document.querySelector('.journey-viewport');
+
+    // Get panzoom instance after init
+    setTimeout(() => {
+      const panzoom = visualizer.panzoomInstance;
+
+      function updateZoomDisplay() {
+        const scale = panzoom.getScale();
+        zoomDisplay.textContent = scale.toFixed(2);
+      }
+
+      document.getElementById('zoom-in').addEventListener('click', () => {
+        panzoom.zoomIn();
+        updateZoomDisplay();
+      });
+
+      document.getElementById('zoom-out').addEventListener('click', () => {
+        panzoom.zoomOut();
+        updateZoomDisplay();
+      });
+
+      document.getElementById('reset-zoom').addEventListener('click', () => {
+        panzoom.reset();
+        updateZoomDisplay();
+      });
+
+      document.getElementById('nav-step1').addEventListener('click', () => {
+        visualizer.navigateTo('start');
+      });
+
+      document.getElementById('nav-step2').addEventListener('click', () => {
+        visualizer.navigateTo('step2');
+      });
+
+      document.getElementById('nav-step3').addEventListener('click', () => {
+        visualizer.navigateTo('step3');
+      });
+
+      // Listen for zoom changes from wheel
+      viewport.addEventListener('wheel', () => {
+        setTimeout(updateZoomDisplay, 10);
+      });
+
+      updateZoomDisplay();
+    }, 500);
+  </script>
+</body>
+</html>
