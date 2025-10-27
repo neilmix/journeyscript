@@ -45,4 +45,35 @@ export class JourneyVisualizer {
       navigation: { ...defaults.navigation, ...userOptions.navigation }
     };
   }
+
+  _discoverSteps() {
+    const stepElements = this.container.querySelectorAll('.step');
+    const stepIds = new Set();
+    const errors = [];
+
+    stepElements.forEach(stepElement => {
+      // Validate ID exists
+      if (!stepElement.id) {
+        errors.push(`Step missing ID: ${stepElement.outerHTML.substring(0, 50)}...`);
+        return;
+      }
+
+      // Validate ID is unique
+      if (stepIds.has(stepElement.id)) {
+        errors.push(`Duplicate step ID: ${stepElement.id}`);
+        return;
+      }
+
+      stepIds.add(stepElement.id);
+      this.steps.push(stepElement);
+    });
+
+    if (errors.length > 0) {
+      throw new Error(errors.join('\n'));
+    }
+
+    if (this.steps.length === 0) {
+      throw new Error('No steps found with class="step"');
+    }
+  }
 }
