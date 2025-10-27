@@ -1,4 +1,6 @@
 // src/JourneyVisualizer.js
+import dagre from 'dagre';
+
 export class JourneyVisualizer {
   constructor(containerSelector, options = {}) {
     this.container = document.querySelector(containerSelector);
@@ -75,5 +77,51 @@ export class JourneyVisualizer {
     if (this.steps.length === 0) {
       throw new Error('No steps found with class="step"');
     }
+  }
+
+  _buildGraph() {
+    this.graph = new dagre.graphlib.Graph();
+
+    // Configure graph layout
+    this.graph.setGraph({
+      rankdir: this.options.layout.direction,
+      ranksep: this.options.layout.rankSep,
+      nodesep: this.options.layout.nodeSep,
+      edgesep: this.options.layout.edgeSep
+    });
+
+    // Add nodes
+    this.steps.forEach(step => {
+      const rect = step.getBoundingClientRect();
+
+      this.graph.setNode(step.id, {
+        width: rect.width || 200,  // Default width if not rendered
+        height: rect.height || 100, // Default height if not rendered
+        element: step
+      });
+    });
+
+    // Add edges
+    const validStepIds = new Set(this.steps.map(s => s.id));
+
+    this.steps.forEach(step => {
+      const actions = step.querySelectorAll('[data-dest]');
+
+      actions.forEach(action => {
+        const destId = action.getAttribute('data-dest');
+        const label = action.textContent.trim();
+
+        // Validate destination exists
+        if (!validStepIds.has(destId)) {
+          console.warn(`Invalid destination: ${step.id} -> ${destId}`);
+          return;
+        }
+
+        this.graph.setEdge(step.id, destId, {
+          label: label,
+          sourceElement: action
+        });
+      });
+    });
   }
 }
