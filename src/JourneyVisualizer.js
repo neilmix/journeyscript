@@ -346,6 +346,7 @@ export class JourneyVisualizer {
       this.panzoomInstance.zoom(options.zoom);
     }
 
+    const previousStep = this.currentStep;
     this.currentStep = stepId;
 
     // Add highlight if enabled
@@ -357,7 +358,7 @@ export class JourneyVisualizer {
     }
 
     // Emit navigate event
-    this._emit('navigate', { from: this.currentStep, to: stepId });
+    this._emit('navigate', { from: previousStep, to: stepId });
   }
 
   reset() {
