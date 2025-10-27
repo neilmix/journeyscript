@@ -273,4 +273,41 @@ export class JourneyVisualizer {
       viewport.addEventListener('wheel', this.panzoomInstance.zoomWithWheel);
     }
   }
+
+  _findStartStep() {
+    const startStep = this.container.querySelector('[data-place="start"]');
+
+    if (!startStep) {
+      console.warn('No start step found with data-place="start", defaulting to first step');
+      return this.steps[0];
+    }
+
+    return startStep;
+  }
+
+  _navigateToStart() {
+    const startStep = this._findStartStep();
+
+    if (!startStep || !this.panzoomInstance) {
+      return;
+    }
+
+    // Get step position and size
+    const rect = startStep.getBoundingClientRect();
+    const containerRect = this.container.getBoundingClientRect();
+    const viewport = this.container.parentElement;
+
+    if (!viewport) {
+      return;
+    }
+
+    const viewportRect = viewport.getBoundingClientRect();
+
+    // Calculate center position
+    const x = (viewportRect.width / 2) - (rect.left - containerRect.left + rect.width / 2);
+    const y = (viewportRect.height / 2) - (rect.top - containerRect.top + rect.height / 2);
+
+    this.panzoomInstance.pan(x, y);
+    this.panzoomInstance.zoom(this.options.zoom.initial);
+  }
 }
