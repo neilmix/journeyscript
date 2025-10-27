@@ -1,5 +1,6 @@
 // src/JourneyVisualizer.js
 import dagre from 'dagre';
+import Panzoom from '@panzoom/panzoom';
 
 export class JourneyVisualizer {
   constructor(containerSelector, options = {}) {
@@ -256,5 +257,20 @@ export class JourneyVisualizer {
         this.svgOverlay.appendChild(text);
       }
     });
+  }
+
+  _initializePanZoom() {
+    this.panzoomInstance = Panzoom(this.container, {
+      maxScale: this.options.zoom.max,
+      minScale: this.options.zoom.min,
+      step: this.options.zoom.step,
+      canvas: true
+    });
+
+    // Enable mouse wheel zoom on parent viewport
+    const viewport = this.container.parentElement;
+    if (viewport) {
+      viewport.addEventListener('wheel', this.panzoomInstance.zoomWithWheel);
+    }
   }
 }
