@@ -91,7 +91,12 @@ export class JourneyVisualizer {
       edgesep: this.options.layout.edgeSep
     });
 
-    // Add nodes
+    // Set position:absolute on steps BEFORE measuring to get accurate dimensions
+    this.steps.forEach(step => {
+      step.style.position = 'absolute';
+    });
+
+    // Add nodes with accurate measurements
     this.steps.forEach(step => {
       const rect = step.getBoundingClientRect();
 

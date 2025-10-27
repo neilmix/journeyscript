@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Debug - Journey Visualizer</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    #debug-output {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: white;
+      border: 2px solid #333;
+      padding: 10px;
+      max-width: 400px;
+      max-height: 80vh;
+      overflow: auto;
+      font-family: monospace;
+      font-size: 11px;
+      z-index: 10000;
+    }
+  </style>
+</head>
+<body>
+  <div id="debug-output"></div>
+
+  <div class="journey-viewport">
+    <div class="journey-container">
+      <div class="step" id="start" data-place="start">
+        <h2>Welcome</h2>
+        <p>This is the starting point of your journey.</p>
+        <button data-dest="step2">Get Started</button>
+      </div>
+
+      <div class="step" id="step2">
+        <h2>Step 2</h2>
+        <p>You're making progress!</p>
+        <button data-dest="step3">Continue</button>
+        <button data-dest="start">Go Back</button>
+      </div>
+
+      <div class="step" id="step3">
+        <h2>Complete</h2>
+        <p>You've reached the end.</p>
+        <button data-dest="start">Restart</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://unpkg.com/@panzoom/panzoom@4.5.1/dist/panzoom.min.js"></script>
+  <script src="../dist/journey-visualizer.umd.js"></script>
+
+  <script>
+    const debugOutput = document.getElementById('debug-output');
+    const originalLog = console.log;
+
+    console.log = function(...args) {
+      originalLog.apply(console, args);
+      const message = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      debugOutput.innerHTML += message + '<br>';
+    };
+
+    const visualizer = new JourneyVisualizer.JourneyVisualizer('.journey-container');
+    visualizer.init();
+  </script>
+</body>
+</html>
