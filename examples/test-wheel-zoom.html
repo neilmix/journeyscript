@@ -1,0 +1,321 @@
+<!-- examples/test-wheel-zoom.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wheel Zoom Bug Test - Journey Visualizer</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    .test-info {
+      margin-bottom: 20px;
+      padding: 15px;
+      background: #f0f0f0;
+      border-radius: 8px;
+    }
+
+    .test-marker {
+      position: fixed;
+      width: 20px;
+      height: 20px;
+      background: red;
+      border: 2px solid white;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 10000;
+      display: none;
+    }
+
+    #test-results {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: white;
+      padding: 15px;
+      border: 2px solid #333;
+      border-radius: 8px;
+      max-width: 300px;
+      font-size: 14px;
+      z-index: 10001;
+    }
+
+    .journey-viewport {
+      border: 2px solid #333;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-info">
+    <h1>Wheel Zoom Bug Test</h1>
+    <p><strong>Test:</strong> Scroll wheel to zoom. The point under your cursor should stay fixed.</p>
+    <p><strong>Expected:</strong> Content zooms around cursor position (zoom-to-cursor)</p>
+    <p><strong>Bug:</strong> Content drifts/shifts when zooming (incorrect pan compensation)</p>
+  </div>
+
+  <div id="test-results" style="display: none;">
+    <h3>Test Results</h3>
+    <div id="results-content"></div>
+  </div>
+
+  <div id="debug-info" style="position: fixed; bottom: 10px; left: 10px; background: yellow; padding: 10px; border: 2px solid black; font-size: 12px; max-width: 400px;">
+    <strong>Debug Info:</strong>
+    <div id="debug-content">Initializing...</div>
+  </div>
+
+  <div class="test-marker" id="cursor-marker"></div>
+
+  <div class="journey-viewport">
+    <div class="journey-container">
+      <div class="step" id="start" data-place="start">
+        <h2>Start</h2>
+        <p>Hover over this step and scroll to zoom.</p>
+        <button data-dest="middle">Next</button>
+      </div>
+
+      <div class="step" id="middle">
+        <h2>Middle Step</h2>
+        <p>Test zooming here too.</p>
+        <button data-dest="end">Next</button>
+      </div>
+
+      <div class="step" id="end">
+        <h2>End Step</h2>
+        <p>Final step for testing.</p>
+        <button data-dest="start">Restart</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load dependencies from CDN -->
+  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://unpkg.com/@panzoom/panzoom@4.5.1/dist/panzoom.min.js"></script>
+
+  <!-- Load our UMD bundle -->
+  <script>
+    // Force fresh load with timestamp
+    const script = document.createElement('script');
+    script.src = '../dist/journey-visualizer.umd.js?t=' + Date.now();
+    document.head.appendChild(script);
+
+    script.onload = function() {
+      console.log('Script loaded');
+      initVisualizerWithDebug();
+    };
+  </script>
+
+  <script>
+    function initVisualizerWithDebug() {
+      // Debug logger
+      const debugDiv = document.getElementById('debug-content');
+      const debugLog = (msg) => {
+        console.log(msg);
+        debugDiv.innerHTML += '<br>' + msg;
+      };
+
+      // Check if class exists
+      debugLog('JourneyVisualizer exists: ' + (typeof JourneyVisualizer !== 'undefined'));
+
+      // Initialize visualizer
+      debugLog('Creating visualizer...');
+      const visualizer = new JourneyVisualizer.JourneyVisualizer('.journey-container');
+
+      debugLog('Checking prototype: ' + (typeof JourneyVisualizer.JourneyVisualizer.prototype._handleWheelZoom));
+      debugLog('Checking instance: ' + (typeof visualizer._handleWheelZoom));
+
+      visualizer.init().then(() => {
+        debugLog('Visualizer initialized');
+        debugLog('Has _handleWheelZoom after init: ' + (typeof visualizer._handleWheelZoom));
+
+        // Make visualizer global for tests
+        window.visualizer = visualizer;
+
+        // Initialize test API
+        initTestAPI();
+      });
+    }
+
+    function initTestAPI() {
+
+      // Test automation API - allows programmatic testing from CDP
+      window.wheelZoomTest = {
+        results: [],
+
+      // Get the current position of a container point in viewport coordinates
+      getViewportPosition(containerX, containerY) {
+        const container = document.querySelector('.journey-container');
+        const transform = window.getComputedStyle(container).transform;
+        const matrix = transform.match(/matrix\((.+)\)/);
+
+        if (!matrix) return { x: 0, y: 0 };
+
+        const values = matrix[1].split(', ').map(parseFloat);
+        const scale = values[0];
+        const panX = values[4];
+        const panY = values[5];
+
+        return {
+          x: containerX * scale + panX,
+          y: containerY * scale + panY
+        };
+      },
+
+      // Get container coordinates from viewport coordinates
+      getContainerPosition(viewportX, viewportY) {
+        const container = document.querySelector('.journey-container');
+        const transform = window.getComputedStyle(container).transform;
+        const matrix = transform.match(/matrix\((.+)\)/);
+
+        if (!matrix) return { x: viewportX, y: viewportY };
+
+        const values = matrix[1].split(', ').map(parseFloat);
+        const scale = values[0];
+        const panX = values[4];
+        const panY = values[5];
+
+        return {
+          x: (viewportX - panX) / scale,
+          y: (viewportY - panY) / scale
+        };
+      },
+
+      // Get current transform state
+      getTransformState() {
+        const container = document.querySelector('.journey-container');
+        const transform = window.getComputedStyle(container).transform;
+        const matrix = transform.match(/matrix\((.+)\)/);
+
+        if (!matrix) return { scale: 1, panX: 0, panY: 0 };
+
+        const values = matrix[1].split(', ').map(parseFloat);
+        return {
+          scale: values[0],
+          panX: values[4],
+          panY: values[5]
+        };
+      },
+
+      // Perform zoom test at specific cursor position (viewport-relative coordinates)
+      async testZoomAt(cursorX, cursorY, zoomDirection = 'in') {
+        const viewport = document.querySelector('.journey-viewport');
+        const marker = document.getElementById('cursor-marker');
+        const viewportRect = viewport.getBoundingClientRect();
+
+        // Convert viewport-relative to window-relative coordinates
+        const windowX = cursorX + viewportRect.left;
+        const windowY = cursorY + viewportRect.top;
+
+        // Show cursor position marker (at window coordinates)
+        marker.style.left = windowX + 'px';
+        marker.style.top = windowY + 'px';
+        marker.style.display = 'block';
+
+        // Record initial state
+        const initialState = this.getTransformState();
+        const containerPoint = this.getContainerPosition(cursorX, cursorY);
+
+        console.log('Initial state:', initialState);
+        console.log('Container point under cursor:', containerPoint);
+        console.log('Window coords:', { windowX, windowY }, 'Viewport coords:', { cursorX, cursorY });
+
+        // Dispatch wheel event with WINDOW-relative coordinates (as real mouse events would have)
+        const deltaY = zoomDirection === 'in' ? -100 : 100;
+        const wheelEvent = new WheelEvent('wheel', {
+          deltaY: deltaY,
+          clientX: windowX,  // Use window-relative coordinates
+          clientY: windowY,  // Use window-relative coordinates
+          bubbles: true
+        });
+
+        viewport.dispatchEvent(wheelEvent);
+
+        // Wait for zoom to complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Record final state
+        const finalState = this.getTransformState();
+        const finalViewportPos = this.getViewportPosition(containerPoint.x, containerPoint.y);
+
+        console.log('Final state:', finalState);
+        console.log('Container point now at viewport:', finalViewportPos);
+
+        // Calculate drift
+        const drift = {
+          x: Math.abs(finalViewportPos.x - cursorX),
+          y: Math.abs(finalViewportPos.y - cursorY)
+        };
+
+        console.log('Drift:', drift);
+
+        const result = {
+          cursorX,
+          cursorY,
+          zoomDirection,
+          initialScale: initialState.scale,
+          finalScale: finalState.scale,
+          drift,
+          passed: drift.x < 1 && drift.y < 1
+        };
+
+        this.results.push(result);
+        this.displayResults();
+
+        // Hide marker
+        marker.style.display = 'none';
+
+        return result;
+      },
+
+      // Display test results
+      displayResults() {
+        const resultsDiv = document.getElementById('test-results');
+        const contentDiv = document.getElementById('results-content');
+
+        resultsDiv.style.display = 'block';
+
+        let html = '';
+        this.results.forEach((result, i) => {
+          const status = result.passed ? '✓ PASS' : '✗ FAIL';
+          const color = result.passed ? 'green' : 'red';
+          html += `
+            <div style="margin-bottom: 10px; padding: 5px; border-left: 3px solid ${color};">
+              <strong>${status}</strong> Test ${i + 1}<br>
+              Cursor: (${result.cursorX}, ${result.cursorY})<br>
+              Direction: ${result.zoomDirection}<br>
+              Drift: ${result.drift.x.toFixed(1)}px, ${result.drift.y.toFixed(1)}px
+            </div>
+          `;
+        });
+
+        contentDiv.innerHTML = html;
+      },
+
+      // Run full test suite
+      async runTests() {
+        this.results = [];
+        const viewport = document.querySelector('.journey-viewport');
+        const rect = viewport.getBoundingClientRect();
+
+        // Test at center
+        await this.testZoomAt(rect.width / 2, rect.height / 2, 'in');
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        // Test at upper-left quadrant
+        await this.testZoomAt(200, 150, 'in');
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        // Test zoom out at different position
+        await this.testZoomAt(600, 400, 'out');
+
+        return this.results;
+      }
+      };
+    }
+  </script>
+</body>
+</html>

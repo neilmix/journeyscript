@@ -317,7 +317,7 @@ export class JourneyVisualizer {
     this._isWheelZoom = false;
 
     // Listen for zoom changes to maintain viewport center
-    // Skip adjustment for wheel zooms (panzoom handles cursor-based zooming)
+    // Skip adjustment for wheel zooms (we handle those separately)
     this.container.addEventListener('panzoomchange', (event) => {
       if (event.detail && this._lastScale !== undefined && event.detail.scale !== this._lastScale) {
         // Only adjust pan for programmatic zooms, not wheel zooms
@@ -330,18 +330,72 @@ export class JourneyVisualizer {
       this._isWheelZoom = false;
     });
 
-    // Enable mouse wheel zoom on parent viewport
+    // Enable mouse wheel zoom on parent viewport with proper cursor-based zooming
     if (viewport) {
-      // Wrap zoomWithWheel to track wheel events
-      const wrappedZoomWithWheel = (event) => {
-        this._isWheelZoom = true;
-        this.panzoomInstance.zoomWithWheel(event);
+      const wheelHandler = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this._handleWheelZoom(event);
       };
-      viewport.addEventListener('wheel', wrappedZoomWithWheel);
+      viewport.addEventListener('wheel', wheelHandler, { passive: false, capture: true });
     }
 
     // Store initial scale
     this._lastScale = 1;
+  }
+
+  _handleWheelZoom(event) {
+    const viewport = this.container.parentElement;
+    if (!viewport) return;
+
+    // Get current transform state
+    const transform = window.getComputedStyle(this.container).transform;
+    const matrix = transform.match(/matrix\((.+)\)/);
+    if (!matrix) return;
+
+    const values = matrix[1].split(', ').map(parseFloat);
+    const currentScale = values[0];
+    const currentPanX = values[4];
+    const currentPanY = values[5];
+
+    // Calculate new scale based on wheel delta
+    const delta = -event.deltaY;
+    const scaleChange = delta > 0 ? this.options.zoom.step : -this.options.zoom.step;
+    const newScale = Math.max(
+      this.options.zoom.min,
+      Math.min(this.options.zoom.max, currentScale + scaleChange)
+    );
+
+    // If scale didn't change (hit min/max), do nothing
+    if (newScale === currentScale) return;
+
+    // Get cursor position in viewport coordinates
+    const viewportRect = viewport.getBoundingClientRect();
+    const cursorX = event.clientX - viewportRect.left;
+    const cursorY = event.clientY - viewportRect.top;
+
+    // Convert cursor position to container coordinates (the point we want to zoom to)
+    const containerPointX = (cursorX - currentPanX) / currentScale;
+    const containerPointY = (cursorY - currentPanY) / currentScale;
+
+    // Calculate new pan to keep the container point under the cursor
+    const newPanX = cursorX - containerPointX * newScale;
+    const newPanY = cursorY - containerPointY * newScale;
+
+    // Set flag to prevent additional pan adjustment
+    this._isWheelZoom = true;
+
+    // Apply the new transform
+    this.container.style.transform = `matrix(${newScale}, 0, 0, ${newScale}, ${newPanX}, ${newPanY})`;
+
+    // Update last scale
+    this._lastScale = newScale;
+
+    // Dispatch panzoomchange event for consistency
+    const changeEvent = new CustomEvent('panzoomchange', {
+      detail: { scale: newScale, x: newPanX, y: newPanY }
+    });
+    this.container.dispatchEvent(changeEvent);
   }
 
   _adjustPanForZoom(oldScale, newScale) {
