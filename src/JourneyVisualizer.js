@@ -124,4 +124,10 @@ export class JourneyVisualizer {
       });
     });
   }
+
+  _computeLayout() {
+    console.time('dagre-layout');
+    dagre.layout(this.graph);
+    console.timeEnd('dagre-layout');
+  }
 }
