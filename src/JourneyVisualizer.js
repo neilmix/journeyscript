@@ -130,4 +130,41 @@ export class JourneyVisualizer {
     dagre.layout(this.graph);
     console.timeEnd('dagre-layout');
   }
+
+  _positionSteps() {
+    let minX = Infinity, minY = Infinity;
+    let maxX = -Infinity, maxY = -Infinity;
+
+    // Position each step and track bounds
+    this.graph.nodes().forEach(nodeId => {
+      const node = this.graph.node(nodeId);
+      const step = node.element;
+
+      // Dagre gives center coordinates, convert to top-left
+      const x = node.x - node.width / 2;
+      const y = node.y - node.height / 2;
+
+      step.style.position = 'absolute';
+      step.style.left = `${x}px`;
+      step.style.top = `${y}px`;
+
+      // Track bounds
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + node.width);
+      maxY = Math.max(maxY, y + node.height);
+    });
+
+    // Size container with padding
+    const padding = 50;
+    const width = maxX - minX + padding * 2;
+    const height = maxY - minY + padding * 2;
+
+    this.container.style.width = `${width}px`;
+    this.container.style.height = `${height}px`;
+    this.container.style.position = 'relative';
+
+    // Store bounds for later use
+    this.bounds = { minX, minY, maxX, maxY, padding };
+  }
 }
