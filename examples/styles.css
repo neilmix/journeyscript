@@ -59,3 +59,9 @@ body {
   0%, 100% { background: white; }
   50% { background: #fffacd; }
 }
+
+.journey-step-current {
+  border-color: #007bff !important;
+  border-width: 3px !important;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.3), 0 2px 8px rgba(0,0,0,0.1);
+}

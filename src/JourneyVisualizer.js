@@ -315,6 +315,9 @@ export class JourneyVisualizer {
 
     this.panzoomInstance.pan(x, y);
     this.panzoomInstance.zoom(scale);
+
+    // Add highlight to starting step
+    startStep.classList.add('journey-step-current');
   }
 
   // Public API methods
@@ -360,7 +363,18 @@ export class JourneyVisualizer {
     const previousStep = this.currentStep;
     this.currentStep = stepId;
 
-    // Add highlight if enabled
+    // Remove highlight from previous step
+    if (previousStep) {
+      const prevStepElement = document.getElementById(previousStep);
+      if (prevStepElement) {
+        prevStepElement.classList.remove('journey-step-current');
+      }
+    }
+
+    // Add persistent highlight to current step
+    step.classList.add('journey-step-current');
+
+    // Add temporary highlight animation if enabled
     if (this.options.navigation.highlightOnNavigate) {
       step.classList.add('journey-step-highlight');
       setTimeout(() => {
