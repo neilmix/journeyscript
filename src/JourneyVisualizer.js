@@ -141,18 +141,16 @@ export class JourneyVisualizer {
     let minX = Infinity, minY = Infinity;
     let maxX = -Infinity, maxY = -Infinity;
 
-    // Position each step and track bounds
+    // First pass: track bounds
+    const positions = new Map();
     this.graph.nodes().forEach(nodeId => {
       const node = this.graph.node(nodeId);
-      const step = node.element;
 
       // Dagre gives center coordinates, convert to top-left
       const x = node.x - node.width / 2;
       const y = node.y - node.height / 2;
 
-      step.style.position = 'absolute';
-      step.style.left = `${x}px`;
-      step.style.top = `${y}px`;
+      positions.set(nodeId, { x, y });
 
       // Track bounds
       minX = Math.min(minX, x);
@@ -161,8 +159,33 @@ export class JourneyVisualizer {
       maxY = Math.max(maxY, y + node.height);
     });
 
-    // Size container with padding
-    const padding = 50;
+    // Calculate padding based on viewport size to allow centering any step
+    // Use viewport dimensions if available, otherwise fallback to reasonable default
+    const viewport = this.container.parentElement;
+    let padding = 50; // Minimum padding for aesthetics
+
+    if (viewport) {
+      // Add at least half the viewport dimensions as padding
+      // This ensures any step can be panned to the center
+      const viewportPadding = Math.max(viewport.clientWidth / 2, viewport.clientHeight / 2);
+      padding = Math.max(padding, viewportPadding);
+    }
+
+    // Second pass: position steps with padding offset
+    this.graph.nodes().forEach(nodeId => {
+      const node = this.graph.node(nodeId);
+      const step = node.element;
+      const pos = positions.get(nodeId);
+
+      // Shift by padding and normalize to container origin
+      const x = pos.x - minX + padding;
+      const y = pos.y - minY + padding;
+
+      step.style.position = 'absolute';
+      step.style.left = `${x}px`;
+      step.style.top = `${y}px`;
+    });
+
     const width = maxX - minX + padding * 2;
     const height = maxY - minY + padding * 2;
 
@@ -269,8 +292,13 @@ export class JourneyVisualizer {
       maxScale: this.options.zoom.max,
       minScale: this.options.zoom.min,
       step: this.options.zoom.step,
-      canvas: true,
-      contain: 'outside'  // Allow panning beyond bounds for proper centering
+      origin: '0 0',  // Set transform-origin to top-left for accurate pan calculations
+      startX: 0,
+      startY: 0,
+      disablePan: false,
+      disableZoom: false,
+      panOnlyWhenZoomed: false,
+      contain: 'none'  // Disable all containment constraints
     });
 
     // Enable mouse wheel zoom on parent viewport
@@ -304,19 +332,21 @@ export class JourneyVisualizer {
       return;
     }
 
+    // Set initial zoom first
+    const scale = this.options.zoom.initial;
+    this.panzoomInstance.zoom(scale, { animate: false });
+
     // Use offset positions (untransformed coordinates) instead of getBoundingClientRect
     const stepCenterX = startStep.offsetLeft + startStep.offsetWidth / 2;
     const stepCenterY = startStep.offsetTop + startStep.offsetHeight / 2;
 
     // Calculate pan to center the step in the viewport at initial zoom
-    // Use initial zoom scale since we're setting zoom right after
     // Use clientWidth/clientHeight to get viewport size excluding borders/scrollbars
-    const scale = this.options.zoom.initial;
     const x = (viewport.clientWidth / 2) - (stepCenterX * scale);
     const y = (viewport.clientHeight / 2) - (stepCenterY * scale);
 
-    this.panzoomInstance.pan(x, y);
-    this.panzoomInstance.zoom(scale);
+    // Directly set the transform to bypass panzoom's containment logic
+    this.container.style.transform = `matrix(${scale}, 0, 0, ${scale}, ${x}, ${y})`;
 
     // Add highlight to starting step
     startStep.classList.add('journey-step-current');
@@ -342,7 +372,12 @@ export class JourneyVisualizer {
       return;
     }
 
-    // Get current scale to account for zoom level
+    // Set zoom first if specified
+    if (options.zoom) {
+      this.panzoomInstance.zoom(options.zoom, { animate: false });
+    }
+
+    // Get current scale after any zoom change
     const scale = this.panzoomInstance.getScale();
 
     // Use offset positions (untransformed coordinates) instead of getBoundingClientRect
@@ -355,12 +390,18 @@ export class JourneyVisualizer {
     const x = (viewport.clientWidth / 2) - (stepCenterX * scale);
     const y = (viewport.clientHeight / 2) - (stepCenterY * scale);
 
-    this.panzoomInstance.pan(x, y, {
-      animate: options.animate !== undefined ? options.animate : true
-    });
+    // Directly set the transform to bypass panzoom's containment logic
+    const animate = options.animate !== undefined ? options.animate : true;
+    if (animate) {
+      this.container.style.transition = 'transform 0.3s ease-in-out';
+    }
+    this.container.style.transform = `matrix(${scale}, 0, 0, ${scale}, ${x}, ${y})`;
 
-    if (options.zoom) {
-      this.panzoomInstance.zoom(options.zoom);
+    if (animate) {
+      // Remove transition after animation completes
+      setTimeout(() => {
+        this.container.style.transition = '';
+      }, 300);
     }
 
     const previousStep = this.currentStep;
