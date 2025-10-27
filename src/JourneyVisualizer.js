@@ -167,4 +167,41 @@ export class JourneyVisualizer {
     // Store bounds for later use
     this.bounds = { minX, minY, maxX, maxY, padding };
   }
+
+  _createSvgOverlay(width, height) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+
+    svg.setAttribute('width', width);
+    svg.setAttribute('height', height);
+    svg.setAttribute('class', 'journey-svg-overlay');
+
+    svg.style.position = 'absolute';
+    svg.style.top = '0px';
+    svg.style.left = '0px';
+    svg.style.pointerEvents = 'none';
+    svg.style.zIndex = '10';
+
+    // Create arrowhead marker definition
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+
+    marker.setAttribute('id', 'arrowhead');
+    marker.setAttribute('markerWidth', '10');
+    marker.setAttribute('markerHeight', '10');
+    marker.setAttribute('refX', '9');
+    marker.setAttribute('refY', '3');
+    marker.setAttribute('orient', 'auto');
+    marker.setAttribute('markerUnits', 'strokeWidth');
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M0,0 L0,6 L9,3 z');
+    path.setAttribute('fill', this.options.arrows.color);
+
+    marker.appendChild(path);
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+
+    this.container.appendChild(svg);
+    this.svgOverlay = svg;
+  }
 }
