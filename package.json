@@ -8,7 +8,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "rollup -c",
-    "dev": "vite"
+    "dev": "vite",
+    "journey-build": "node tools/journey-build.js"
   },
   "keywords": [
     "visualization",
@@ -25,6 +26,7 @@
   "devDependencies": {
     "@rollup/plugin-commonjs": "^25.0.0",
     "@rollup/plugin-node-resolve": "^15.0.0",
+    "@types/markdown-it": "^14.1.2",
     "chrome-remote-interface": "^0.33.3",
     "jsdom": "^23.0.0",
     "markdown-it": "^14.1.0",

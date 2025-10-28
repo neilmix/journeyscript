@@ -1,66 +1,142 @@
-<!-- examples/branching.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Branching Journey - Journey Visualizer</title>
-  <link rel="stylesheet" href="styles.css">
+  <style>
+/* examples/styles.css */
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.journey-viewport {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+  background: #f5f5f5;
+}
+
+.journey-container {
+  position: relative;
+}
+
+.step {
+  background: white;
+  border: 2px solid #333;
+  border-radius: 8px;
+  padding: 20px;
+  min-width: 200px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.step h2 {
+  margin: 0 0 10px 0;
+  font-size: 18px;
+}
+
+.step p {
+  margin: 0 0 15px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.step button {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: 8px;
+  font-size: 14px;
+}
+
+.step button:hover {
+  background: #0056b3;
+}
+
+.journey-step-highlight {
+  animation: highlight 1s ease-in-out;
+}
+
+@keyframes highlight {
+  0%, 100% { background: white; }
+  50% { background: #fffacd; }
+}
+
+.journey-step-current {
+  border-color: #007bff !important;
+  border-width: 3px !important;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.3), 0 2px 8px rgba(0,0,0,0.1);
+}
+
+  </style>
 </head>
 <body>
   <div class="journey-viewport">
     <div class="journey-container">
-      <div class="step" id="landing" data-place="start">
+      <div class="step" id="branching-journey" data-place="start">
+        <h2>Branching Journey</h2>
+        
+      </div>
+
+      <div class="step" id="landing-page">
         <h2>Landing Page</h2>
         <p>Choose your path</p>
-        <button data-dest="signup">Sign Up</button>
-        <button data-dest="login">Log In</button>
+        <p><button data-dest="sign-up">Sign Up</button> <button data-dest="log-in">Log In</button></p>
+        
       </div>
 
-      <div class="step" id="signup">
+      <div class="step" id="sign-up">
         <h2>Sign Up</h2>
         <p>Create a new account</p>
-        <button data-dest="verification">Submit</button>
-        <button data-dest="landing">Cancel</button>
+        <p><button data-dest="email-verification">Submit</button> <button data-dest="landing-page">Cancel</button></p>
+        
       </div>
 
-      <div class="step" id="login">
+      <div class="step" id="log-in">
         <h2>Log In</h2>
         <p>Enter credentials</p>
-        <button data-dest="dashboard">Log In</button>
-        <button data-dest="forgot">Forgot Password</button>
+        <p><button data-dest="dashboard">Log In</button> <button data-dest="reset-password">Forgot Password</button></p>
+        
       </div>
 
-      <div class="step" id="verification">
+      <div class="step" id="email-verification">
         <h2>Email Verification</h2>
         <p>Check your email</p>
-        <button data-dest="dashboard">Verify</button>
+        <p><button data-dest="dashboard">Verify</button></p>
+        
       </div>
 
-      <div class="step" id="forgot">
+      <div class="step" id="reset-password">
         <h2>Reset Password</h2>
         <p>Enter email</p>
-        <button data-dest="login">Reset</button>
+        <p><button data-dest="log-in">Reset</button></p>
+        
       </div>
 
       <div class="step" id="dashboard">
         <h2>Dashboard</h2>
         <p>Welcome!</p>
-        <button data-dest="profile">Profile</button>
-        <button data-dest="settings">Settings</button>
-        <button data-dest="landing">Log Out</button>
+        <p><button data-dest="profile">Profile</button> <button data-dest="settings">Settings</button> <button data-dest="landing-page">Log Out</button></p>
+        
       </div>
 
       <div class="step" id="profile">
         <h2>Profile</h2>
         <p>Your profile</p>
-        <button data-dest="dashboard">Back</button>
+        <p><button data-dest="dashboard">Back</button></p>
+        
       </div>
 
       <div class="step" id="settings">
         <h2>Settings</h2>
         <p>Preferences</p>
-        <button data-dest="dashboard">Back</button>
+        <p><button data-dest="dashboard">Back</button></p>
+        
       </div>
     </div>
   </div>
@@ -69,13 +145,700 @@
   <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
   <script src="https://unpkg.com/@panzoom/panzoom@4.5.1/dist/panzoom.min.js"></script>
 
-  <!-- Load our UMD bundle -->
-  <script src="../dist/journey-visualizer.umd.js"></script>
+  <!-- Inlined journey visualizer -->
+  <script>
+(function (global, factory) {
+  typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports, require('dagre'), require('@panzoom/panzoom')) :
+  typeof define === 'function' && define.amd ? define(['exports', 'dagre', '@panzoom/panzoom'], factory) :
+  (global = typeof globalThis !== 'undefined' ? globalThis : global || self, factory(global.JourneyVisualizer = {}, global.dagre, global.Panzoom));
+})(this, (function (exports, dagre, Panzoom) { 'use strict';
+
+  // src/JourneyVisualizer.js
+
+  class JourneyVisualizer {
+    constructor(containerSelector, options = {}) {
+      this.container = document.querySelector(containerSelector);
+
+      if (!this.container) {
+        throw new Error(`Container not found: ${containerSelector}`);
+      }
+
+      this.options = this._mergeOptions(options);
+      this.steps = [];
+      this.graph = null;
+      this.panzoomInstance = null;
+    }
+
+    _mergeOptions(userOptions) {
+      const defaults = {
+        layout: {
+          direction: 'TB',
+          rankSep: 100,
+          nodeSep: 80,
+          edgeSep: 30
+        },
+        zoom: {
+          initial: 1,
+          min: 0.1,
+          max: 3,
+          step: 0.1
+        },
+        arrows: {
+          showLabels: true,
+          color: '#333',
+          width: 2
+        },
+        navigation: {
+          animationDuration: 300,
+          highlightOnNavigate: true
+        }
+      };
+
+      return {
+        layout: { ...defaults.layout, ...userOptions.layout },
+        zoom: { ...defaults.zoom, ...userOptions.zoom },
+        arrows: { ...defaults.arrows, ...userOptions.arrows },
+        navigation: { ...defaults.navigation, ...userOptions.navigation }
+      };
+    }
+
+    _discoverSteps() {
+      const stepElements = this.container.querySelectorAll('.step');
+      const stepIds = new Set();
+      const errors = [];
+
+      stepElements.forEach(stepElement => {
+        // Validate ID exists
+        if (!stepElement.id) {
+          errors.push(`Step missing ID: ${stepElement.outerHTML.substring(0, 50)}...`);
+          return;
+        }
+
+        // Validate ID is unique
+        if (stepIds.has(stepElement.id)) {
+          errors.push(`Duplicate step ID: ${stepElement.id}`);
+          return;
+        }
+
+        stepIds.add(stepElement.id);
+        this.steps.push(stepElement);
+      });
+
+      if (errors.length > 0) {
+        throw new Error(errors.join('\n'));
+      }
+
+      if (this.steps.length === 0) {
+        throw new Error('No steps found with class="step"');
+      }
+    }
+
+    _buildGraph() {
+      this.graph = new dagre.graphlib.Graph();
+
+      // Configure graph layout
+      this.graph.setGraph({
+        rankdir: this.options.layout.direction,
+        ranksep: this.options.layout.rankSep,
+        nodesep: this.options.layout.nodeSep,
+        edgesep: this.options.layout.edgeSep
+      });
+
+      // Set position:absolute on steps BEFORE measuring to get accurate dimensions
+      this.steps.forEach(step => {
+        step.style.position = 'absolute';
+      });
+
+      // Add nodes with accurate measurements
+      this.steps.forEach(step => {
+        const rect = step.getBoundingClientRect();
+
+        this.graph.setNode(step.id, {
+          width: rect.width || 200,  // Default width if not rendered
+          height: rect.height || 100, // Default height if not rendered
+          element: step
+        });
+      });
+
+      // Add edges
+      const validStepIds = new Set(this.steps.map(s => s.id));
+
+      this.steps.forEach(step => {
+        const actions = step.querySelectorAll('[data-dest]');
+
+        actions.forEach(action => {
+          const destId = action.getAttribute('data-dest');
+          const label = action.textContent.trim();
+
+          // Validate destination exists
+          if (!validStepIds.has(destId)) {
+            console.warn(`Invalid destination: ${step.id} -> ${destId}`);
+            return;
+          }
+
+          this.graph.setEdge(step.id, destId, {
+            label: label,
+            sourceElement: action
+          });
+        });
+      });
+    }
+
+    _computeLayout() {
+      console.time('dagre-layout');
+      dagre.layout(this.graph);
+      console.timeEnd('dagre-layout');
+    }
+
+    _positionSteps() {
+      let minX = Infinity, minY = Infinity;
+      let maxX = -Infinity, maxY = -Infinity;
+
+      // First pass: track bounds
+      const positions = new Map();
+      this.graph.nodes().forEach(nodeId => {
+        const node = this.graph.node(nodeId);
+
+        // Dagre gives center coordinates, convert to top-left
+        const x = node.x - node.width / 2;
+        const y = node.y - node.height / 2;
+
+        positions.set(nodeId, { x, y });
+
+        // Track bounds
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x + node.width);
+        maxY = Math.max(maxY, y + node.height);
+      });
+
+      // Calculate padding based on viewport size to allow centering any step
+      // Use viewport dimensions if available, otherwise fallback to reasonable default
+      const viewport = this.container.parentElement;
+      let padding = 50; // Minimum padding for aesthetics
+
+      if (viewport) {
+        // Add at least half the viewport dimensions as padding
+        // This ensures any step can be panned to the center
+        const viewportPadding = Math.max(viewport.clientWidth / 2, viewport.clientHeight / 2);
+        padding = Math.max(padding, viewportPadding);
+      }
+
+      // Second pass: position steps with padding offset
+      this.graph.nodes().forEach(nodeId => {
+        const node = this.graph.node(nodeId);
+        const step = node.element;
+        const pos = positions.get(nodeId);
+
+        // Shift by padding and normalize to container origin
+        const x = pos.x - minX + padding;
+        const y = pos.y - minY + padding;
+
+        step.style.position = 'absolute';
+        step.style.left = `${x}px`;
+        step.style.top = `${y}px`;
+      });
+
+      const width = maxX - minX + padding * 2;
+      const height = maxY - minY + padding * 2;
+
+      this.container.style.width = `${width}px`;
+      this.container.style.height = `${height}px`;
+      this.container.style.position = 'relative';
+
+      // Store bounds for later use
+      this.bounds = { minX, minY, maxX, maxY, padding };
+    }
+
+    _createSvgOverlay(width, height) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+
+      svg.setAttribute('width', width);
+      svg.setAttribute('height', height);
+      svg.setAttribute('class', 'journey-svg-overlay');
+
+      svg.style.position = 'absolute';
+      svg.style.top = '0px';
+      svg.style.left = '0px';
+      svg.style.pointerEvents = 'none';
+      svg.style.zIndex = '10';
+
+      // Create arrowhead marker definition
+      const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+
+      marker.setAttribute('id', 'arrowhead');
+      marker.setAttribute('markerWidth', '10');
+      marker.setAttribute('markerHeight', '10');
+      marker.setAttribute('refX', '9');
+      marker.setAttribute('refY', '3');
+      marker.setAttribute('orient', 'auto');
+      marker.setAttribute('markerUnits', 'strokeWidth');
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M0,0 L0,6 L9,3 z');
+      path.setAttribute('fill', this.options.arrows.color);
+
+      marker.appendChild(path);
+      defs.appendChild(marker);
+      svg.appendChild(defs);
+
+      this.container.appendChild(svg);
+      this.svgOverlay = svg;
+    }
+
+    _drawArrows() {
+      // Calculate offset to account for padding added in _positionSteps
+      const offsetX = -this.bounds.minX + this.bounds.padding;
+      const offsetY = -this.bounds.minY + this.bounds.padding;
+
+      this.graph.edges().forEach(edgeObj => {
+        const edge = this.graph.edge(edgeObj);
+
+        // Build SVG path from Dagre-computed points, offset by padding
+        const pathData = edge.points
+          .map((point, i) => {
+            const x = point.x + offsetX;
+            const y = point.y + offsetY;
+            return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+          })
+          .join(' ');
+
+        // Create arrow path
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', pathData);
+        path.setAttribute('class', 'journey-arrow');
+        path.setAttribute('marker-end', 'url(#arrowhead)');
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', this.options.arrows.color);
+        path.setAttribute('stroke-width', this.options.arrows.width);
+
+        this.svgOverlay.appendChild(path);
+
+        // Add label at midpoint if enabled
+        if (this.options.arrows.showLabels && edge.label) {
+          const midpoint = edge.points[Math.floor(edge.points.length / 2)];
+          const midX = midpoint.x + offsetX;
+          const midY = midpoint.y + offsetY;
+
+          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', midX);
+          text.setAttribute('y', midY);
+          text.setAttribute('class', 'arrow-label');
+          text.setAttribute('text-anchor', 'middle');
+          text.setAttribute('dominant-baseline', 'middle');
+          text.setAttribute('fill', this.options.arrows.color);
+          text.setAttribute('font-size', '12px');
+          text.setAttribute('font-family', 'system-ui, sans-serif');
+          text.textContent = edge.label;
+
+          // Add white background for readability
+          const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          const bbox = text.getBBox ? { width: edge.label.length * 7, height: 16 } : { width: 50, height: 16 };
+          bgRect.setAttribute('x', midX - bbox.width / 2 - 4);
+          bgRect.setAttribute('y', midY - bbox.height / 2 - 2);
+          bgRect.setAttribute('width', bbox.width + 8);
+          bgRect.setAttribute('height', bbox.height + 4);
+          bgRect.setAttribute('fill', 'white');
+          bgRect.setAttribute('stroke', '#ccc');
+          bgRect.setAttribute('stroke-width', '1');
+          bgRect.setAttribute('rx', '3');
+
+          this.svgOverlay.appendChild(bgRect);
+          this.svgOverlay.appendChild(text);
+        }
+      });
+    }
+
+    _initializePanZoom() {
+      const viewport = this.container.parentElement;
+
+      this.panzoomInstance = Panzoom(this.container, {
+        maxScale: this.options.zoom.max,
+        minScale: this.options.zoom.min,
+        step: this.options.zoom.step,
+        origin: '0 0',  // Keep at 0,0 for consistent math
+        startX: 0,
+        startY: 0,
+        disablePan: false,
+        disableZoom: false,
+        panOnlyWhenZoomed: false,
+        contain: 'none'  // Disable all containment constraints
+      });
+
+      // Track if zoom is from wheel event
+      this._isWheelZoom = false;
+
+      // Listen for zoom changes to maintain viewport center
+      // Skip adjustment for wheel zooms (we handle those separately)
+      this.container.addEventListener('panzoomchange', (event) => {
+        if (event.detail && this._lastScale !== undefined && event.detail.scale !== this._lastScale) {
+          // Only adjust pan for programmatic zooms, not wheel zooms
+          if (!this._isWheelZoom) {
+            this._adjustPanForZoom(this._lastScale, event.detail.scale);
+          }
+        }
+        this._lastScale = event.detail ? event.detail.scale : 1;
+        // Reset wheel zoom flag after handling
+        this._isWheelZoom = false;
+      });
+
+      // Enable mouse wheel zoom on parent viewport with proper cursor-based zooming
+      if (viewport) {
+        const wheelHandler = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          this._handleWheelZoom(event);
+        };
+        viewport.addEventListener('wheel', wheelHandler, { passive: false, capture: true });
+      }
+
+      // Store initial scale
+      this._lastScale = 1;
+    }
+
+    _handleWheelZoom(event) {
+      const viewport = this.container.parentElement;
+      if (!viewport) return;
+
+      // Get current transform state
+      const transform = window.getComputedStyle(this.container).transform;
+      const matrix = transform.match(/matrix\((.+)\)/);
+      if (!matrix) return;
+
+      const values = matrix[1].split(', ').map(parseFloat);
+      const currentScale = values[0];
+      const currentPanX = values[4];
+      const currentPanY = values[5];
+
+      // Calculate new scale based on wheel delta
+      const delta = -event.deltaY;
+      const scaleChange = delta > 0 ? this.options.zoom.step : -this.options.zoom.step;
+      const newScale = Math.max(
+        this.options.zoom.min,
+        Math.min(this.options.zoom.max, currentScale + scaleChange)
+      );
+
+      // If scale didn't change (hit min/max), do nothing
+      if (newScale === currentScale) return;
+
+      // Get cursor position in viewport coordinates
+      const viewportRect = viewport.getBoundingClientRect();
+      const cursorX = event.clientX - viewportRect.left;
+      const cursorY = event.clientY - viewportRect.top;
+
+      // Convert cursor position to container coordinates (the point we want to zoom to)
+      const containerPointX = (cursorX - currentPanX) / currentScale;
+      const containerPointY = (cursorY - currentPanY) / currentScale;
+
+      // Calculate new pan to keep the container point under the cursor
+      const newPanX = cursorX - containerPointX * newScale;
+      const newPanY = cursorY - containerPointY * newScale;
+
+      // Set flag to prevent additional pan adjustment
+      this._isWheelZoom = true;
+
+      // Apply the new transform
+      this.container.style.transform = `matrix(${newScale}, 0, 0, ${newScale}, ${newPanX}, ${newPanY})`;
+
+      // Update last scale
+      this._lastScale = newScale;
+
+      // Dispatch panzoomchange event for consistency
+      const changeEvent = new CustomEvent('panzoomchange', {
+        detail: { scale: newScale, x: newPanX, y: newPanY }
+      });
+      this.container.dispatchEvent(changeEvent);
+    }
+
+    _adjustPanForZoom(oldScale, newScale) {
+      const viewport = this.container.parentElement;
+      if (!viewport) return;
+
+      // Get current pan from transform
+      const transform = window.getComputedStyle(this.container).transform;
+      const matrix = transform.match(/matrix\((.+)\)/);
+      if (!matrix) return;
+
+      const values = matrix[1].split(', ');
+      const oldPanX = parseFloat(values[4]);
+      const oldPanY = parseFloat(values[5]);
+
+      // Calculate viewport center
+      const vpCenterX = viewport.clientWidth / 2;
+      const vpCenterY = viewport.clientHeight / 2;
+
+      // Find the container point that was at viewport center
+      const containerCenterX = (vpCenterX - oldPanX) / oldScale;
+      const containerCenterY = (vpCenterY - oldPanY) / oldScale;
+
+      // Calculate new pan to keep same container point at viewport center
+      const newPanX = vpCenterX - containerCenterX * newScale;
+      const newPanY = vpCenterY - containerCenterY * newScale;
+
+      // Apply the adjusted transform directly
+      this.container.style.transform = `matrix(${newScale}, 0, 0, ${newScale}, ${newPanX}, ${newPanY})`;
+    }
+
+    _findStartStep() {
+      const startStep = this.container.querySelector('[data-place="start"]');
+
+      if (!startStep) {
+        console.warn('No start step found with data-place="start", defaulting to first step');
+        return this.steps[0];
+      }
+
+      return startStep;
+    }
+
+    _navigateToStart() {
+      const startStep = this._findStartStep();
+
+      if (!startStep || !this.panzoomInstance) {
+        return;
+      }
+
+      const viewport = this.container.parentElement;
+
+      if (!viewport) {
+        return;
+      }
+
+      // Use offset positions (untransformed coordinates) instead of getBoundingClientRect
+      const stepCenterX = startStep.offsetLeft + startStep.offsetWidth / 2;
+      const stepCenterY = startStep.offsetTop + startStep.offsetHeight / 2;
+
+      // Calculate pan to center the step in the viewport at initial zoom
+      // Use clientWidth/clientHeight to get viewport size excluding borders/scrollbars
+      const scale = this.options.zoom.initial;
+      const x = (viewport.clientWidth / 2) - (stepCenterX * scale);
+      const y = (viewport.clientHeight / 2) - (stepCenterY * scale);
+
+      // Directly set the transform
+      this.container.style.transform = `matrix(${scale}, 0, 0, ${scale}, ${x}, ${y})`;
+
+      // Add highlight to starting step
+      startStep.classList.add('journey-step-current');
+    }
+
+    // Public API methods
+    navigateTo(stepId, options = {}) {
+      const step = document.getElementById(stepId);
+
+      if (!step) {
+        console.warn(`Step not found: ${stepId}`);
+        return;
+      }
+
+      if (!this.panzoomInstance) {
+        console.warn('Panzoom not initialized');
+        return;
+      }
+
+      const viewport = this.container.parentElement;
+
+      if (!viewport) {
+        return;
+      }
+
+      // Get current scale (or use specified zoom)
+      const scale = options.zoom || this.panzoomInstance.getScale();
+
+      // Use offset positions (untransformed coordinates) instead of getBoundingClientRect
+      const stepCenterX = step.offsetLeft + step.offsetWidth / 2;
+      const stepCenterY = step.offsetTop + step.offsetHeight / 2;
+
+      // Calculate pan to center the step in the viewport
+      // Account for current scale: when scaled, positions are multiplied by scale
+      // Use clientWidth/clientHeight to get viewport size excluding borders/scrollbars
+      const x = (viewport.clientWidth / 2) - (stepCenterX * scale);
+      const y = (viewport.clientHeight / 2) - (stepCenterY * scale);
+
+      // Apply animation if requested
+      const animate = options.animate !== undefined ? options.animate : true;
+      if (animate) {
+        this.container.style.transition = 'transform 0.3s ease-in-out';
+      }
+
+      // Apply the transform directly to center the step
+      this.container.style.transform = `matrix(${scale}, 0, 0, ${scale}, ${x}, ${y})`;
+
+      if (animate) {
+        // Remove transition after animation completes
+        setTimeout(() => {
+          this.container.style.transition = '';
+        }, 300);
+      }
+
+      const previousStep = this.currentStep;
+      this.currentStep = stepId;
+
+      // Remove highlight from previous step
+      if (previousStep) {
+        const prevStepElement = document.getElementById(previousStep);
+        if (prevStepElement) {
+          prevStepElement.classList.remove('journey-step-current');
+        }
+      }
+
+      // Add persistent highlight to current step
+      step.classList.add('journey-step-current');
+
+      // Add temporary highlight animation if enabled
+      if (this.options.navigation.highlightOnNavigate) {
+        step.classList.add('journey-step-highlight');
+        setTimeout(() => {
+          step.classList.remove('journey-step-highlight');
+        }, 1000);
+      }
+
+      // Emit navigate event
+      this._emit('navigate', { from: previousStep, to: stepId });
+    }
+
+    reset() {
+      this._navigateToStart();
+    }
+
+    refresh() {
+      // Re-measure and re-layout
+      this._buildGraph();
+      this._computeLayout();
+      this._positionSteps();
+
+      // Redraw arrows
+      if (this.svgOverlay) {
+        this.svgOverlay.innerHTML = '';
+        this._createSvgOverlay(
+          parseInt(this.container.style.width),
+          parseInt(this.container.style.height)
+        );
+      }
+      this._drawArrows();
+
+      this._emit('layout-complete');
+    }
+
+    getState() {
+      return {
+        currentStep: this.currentStep,
+        totalSteps: this.steps.length,
+        scale: this.panzoomInstance ? this.panzoomInstance.getScale() : 1,
+        pan: this.panzoomInstance ? this.panzoomInstance.getPan() : { x: 0, y: 0 }
+      };
+    }
+
+    destroy() {
+      if (this.panzoomInstance) {
+        this.panzoomInstance.destroy();
+        this.panzoomInstance = null;
+      }
+
+      if (this.svgOverlay && this.svgOverlay.parentNode) {
+        this.svgOverlay.parentNode.removeChild(this.svgOverlay);
+      }
+
+      this._emit('destroy');
+    }
+
+    // Event system
+    on(eventName, callback) {
+      if (!this.eventHandlers) {
+        this.eventHandlers = {};
+      }
+      if (!this.eventHandlers[eventName]) {
+        this.eventHandlers[eventName] = [];
+      }
+      this.eventHandlers[eventName].push(callback);
+    }
+
+    _emit(eventName, data) {
+      if (!this.eventHandlers || !this.eventHandlers[eventName]) {
+        return;
+      }
+      this.eventHandlers[eventName].forEach(callback => callback(data));
+    }
+
+    // Main initialization method
+    async init() {
+      try {
+        console.time('journey-init');
+
+        // Wait for fonts and images to load for accurate measurements
+        await this._waitForContentReady();
+
+        // Step-by-step initialization
+        this._discoverSteps();
+        this._buildGraph();
+        this._computeLayout();
+        this._positionSteps();
+
+        const width = parseInt(this.container.style.width);
+        const height = parseInt(this.container.style.height);
+        this._createSvgOverlay(width, height);
+        this._drawArrows();
+
+        this._initializePanZoom();
+        this._setupButtonHandlers();
+
+        // Wait for panzoom to fully initialize before navigating to start
+        await new Promise(resolve => setTimeout(resolve, 0));
+        this._navigateToStart();
+
+        this.currentStep = this._findStartStep().id;
+
+        console.timeEnd('journey-init');
+        this._emit('layout-complete');
+
+        return this;
+      } catch (error) {
+        console.error('Initialization failed:', error);
+        throw error;
+      }
+    }
+
+    async _waitForContentReady() {
+      // Wait for fonts
+      if (document.fonts && document.fonts.ready) {
+        await document.fonts.ready;
+      }
+
+      // Wait for images
+      const images = Array.from(this.container.querySelectorAll('img'))
+        .filter(img => !img.complete);
+
+      if (images.length > 0) {
+        await Promise.all(
+          images.map(img => new Promise(resolve => {
+            img.onload = resolve;
+            img.onerror = resolve; // Continue even if image fails
+          }))
+        );
+      }
+    }
+
+    _setupButtonHandlers() {
+      const buttons = this.container.querySelectorAll('[data-dest]');
+
+      buttons.forEach(button => {
+        button.addEventListener('click', (e) => {
+          const destId = button.getAttribute('data-dest');
+          if (destId) {
+            this.navigateTo(destId, { animate: true });
+          }
+        });
+      });
+    }
+  }
+
+  exports.JourneyVisualizer = JourneyVisualizer;
+
+}));
+
+  </script>
 
   <script>
-    const visualizer = new JourneyVisualizer.JourneyVisualizer('.journey-container', {
-      layout: { direction: 'TB' }
-    });
+    const visualizer = new JourneyVisualizer.JourneyVisualizer('.journey-container');
     visualizer.init();
   </script>
 </body>
