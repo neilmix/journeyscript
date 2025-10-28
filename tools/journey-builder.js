@@ -114,7 +114,7 @@ export function renderStepContent(markdown, stepNames) {
   // Parse HTML and convert links to buttons or keep as links
   const linkRegex = /<a href="([^"]*)"[^>]*>([^<]*)<\/a>/g;
 
-  const result = html.replace(linkRegex, (match, href, text) => {
+  let result = html.replace(linkRegex, (match, href, text) => {
     // Check if it's an external URL
     if (isExternalUrl(href)) {
       return match; // Keep as regular link
@@ -129,6 +129,22 @@ export function renderStepContent(markdown, stepNames) {
 
     // Link doesn't match a step - warn and create no-op button
     console.warn(`Warning: Link target "${href}" does not match any step. Creating no-op button.`);
+    return `<button>${text}</button>`;
+  });
+
+  // Handle buttons without explicit destinations: [Button Text]
+  // These appear as plain text in HTML since they're not valid markdown links
+  const buttonTextRegex = /\[([^\]]+)\]/g;
+
+  result = result.replace(buttonTextRegex, (match, text) => {
+    // Check if the button text matches a step name
+    if (stepNames.has(text)) {
+      const stepId = stepNames.get(text);
+      return `<button data-dest="${stepId}">${text}</button>`;
+    }
+
+    // No matching step - warn and create no-op button
+    console.warn(`Warning: Button text "${text}" does not match any step. Creating no-op button.`);
     return `<button>${text}</button>`;
   });
 

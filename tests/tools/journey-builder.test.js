@@ -192,6 +192,60 @@ describe('renderStepContent', () => {
     expect(html).toContain('<em>italic</em>');
   });
 
+  it('should link buttons without explicit destination to matching headings', () => {
+    const stepNames = new Map([
+      ['Welcome', 'welcome'],
+      ['Next Step', 'next-step'],
+      ['Complete', 'complete']
+    ]);
+    const markdown = '[Next Step]';
+
+    const html = renderStepContent(markdown, stepNames);
+
+    expect(html).toContain('<button data-dest="next-step">Next Step</button>');
+  });
+
+  it('should handle multiple buttons without destinations on same line', () => {
+    const stepNames = new Map([
+      ['Continue', 'continue'],
+      ['Go Back', 'go-back']
+    ]);
+    const markdown = '[Continue] [Go Back]';
+
+    const html = renderStepContent(markdown, stepNames);
+
+    expect(html).toContain('<button data-dest="continue">Continue</button>');
+    expect(html).toContain('<button data-dest="go-back">Go Back</button>');
+  });
+
+  it('should create no-op button when button text has no matching heading', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const stepNames = new Map([['Welcome', 'welcome']]);
+    const markdown = '[Nonexistent Step]';
+
+    const html = renderStepContent(markdown, stepNames);
+
+    expect(warnSpy).toHaveBeenCalledWith('Warning: Button text "Nonexistent Step" does not match any step. Creating no-op button.');
+    expect(html).toContain('<button>Nonexistent Step</button>');
+    expect(html).not.toContain('data-dest');
+
+    warnSpy.mockRestore();
+  });
+
+  it('should prefer explicit destination over button text matching', () => {
+    const stepNames = new Map([
+      ['Welcome', 'welcome'],
+      ['Step 2', 'step-2']
+    ]);
+    const markdown = '[Get Started](Step 2)';
+
+    const html = renderStepContent(markdown, stepNames);
+
+    // Should use explicit destination, not button text
+    expect(html).toContain('<button data-dest="step-2">Get Started</button>');
+  });
+
   it('should convert internal links to buttons', () => {
     const stepNames = new Map([
       ['Welcome', 'welcome'],
