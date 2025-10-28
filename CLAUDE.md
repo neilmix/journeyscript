@@ -54,3 +54,7 @@ asking for help, make sure to say, "I need help!"
 Measure, measure, measure. If you don't know, don't proceed until you do. If you are unable
 to determine something with certainty, ask the user by saying, "I need help!" They will
 guide you.
+
+## Other Notes
+
+Make sure to build the dist directory when you've completed your work.

@@ -105,6 +105,12 @@ export class ZoomPanController {
     // Only handle primary button (left click / touch)
     if (event.button !== 0) return;
 
+    // Don't interfere with interactive elements
+    const target = event.target;
+    if (this._isInteractiveElement(target)) {
+      return;
+    }
+
     // Start dragging
     this.isDragging = true;
     this.dragStartX = event.clientX;
@@ -117,6 +123,14 @@ export class ZoomPanController {
 
     // Change cursor
     this.element.style.cursor = 'grabbing';
+  }
+
+  _isInteractiveElement(element) {
+    // Check if element is a form control or other interactive element
+    if (element.matches) {
+      return element.matches('select, input, textarea, button, a, [contenteditable], [data-dest]');
+    }
+    return false;
   }
 
   _handlePointerMove(event) {

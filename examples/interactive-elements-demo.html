@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive Elements Demo - JourneyScript</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f5f5f5;
+    }
+
+    .journey-viewport {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .journey-container {
+      position: relative;
+    }
+
+    .step {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      min-width: 300px;
+      max-width: 400px;
+    }
+
+    .step h2 {
+      margin-top: 0;
+      color: #333;
+      font-size: 24px;
+    }
+
+    .step p {
+      color: #666;
+      line-height: 1.6;
+    }
+
+    /* Form elements styling */
+    .form-group {
+      margin: 15px 0;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      color: #555;
+      font-weight: 500;
+    }
+
+    select, input, textarea {
+      width: 100%;
+      padding: 8px 12px;
+      border: 2px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+
+    select:focus, input:focus, textarea:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 60px;
+    }
+
+    button {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-right: 10px;
+      margin-top: 10px;
+    }
+
+    button:hover {
+      background: #5568d3;
+    }
+
+    button[data-dest] {
+      background: #764ba2;
+    }
+
+    button[data-dest]:hover {
+      background: #653a8f;
+    }
+
+    a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .journey-step-current {
+      box-shadow: 0 0 0 3px #ffd700, 0 4px 20px rgba(0,0,0,0.15);
+    }
+
+    .contenteditable-box {
+      border: 2px dashed #ddd;
+      padding: 10px;
+      border-radius: 6px;
+      min-height: 40px;
+      cursor: text;
+    }
+
+    .contenteditable-box:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .info-box {
+      background: #e7f3ff;
+      border-left: 4px solid #2196F3;
+      padding: 15px;
+      margin: 15px 0;
+      border-radius: 4px;
+    }
+
+    .info-box strong {
+      color: #1976D2;
+    }
+  </style>
+</head>
+<body>
+  <div class="journey-viewport">
+    <div class="journey-container">
+
+      <div class="step" id="welcome" data-place="start">
+        <h2>🎯 Interactive Elements Demo</h2>
+        <p>This demo shows that you can now interact with form elements while still being able to pan and zoom the canvas!</p>
+
+        <div class="info-box">
+          <strong>Try this:</strong> Try clicking and dragging on this card - you'll pan the canvas. But when you click on any form element below, it will work normally!
+        </div>
+
+        <button data-dest="forms">Test Form Elements →</button>
+      </div>
+
+      <div class="step" id="forms">
+        <h2>📝 Form Elements</h2>
+        <p>All form elements work normally - no interference from pan/zoom!</p>
+
+        <div class="form-group">
+          <label for="name">Text Input:</label>
+          <input type="text" id="name" placeholder="Type your name">
+        </div>
+
+        <div class="form-group">
+          <label for="color">Select Dropdown:</label>
+          <select id="color">
+            <option value="">Choose a color...</option>
+            <option value="red">Red</option>
+            <option value="blue">Blue</option>
+            <option value="green">Green</option>
+            <option value="yellow">Yellow</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="message">Textarea:</label>
+          <textarea id="message" placeholder="Write a message..."></textarea>
+        </div>
+
+        <button data-dest="more">More Examples →</button>
+        <button data-dest="welcome">← Back</button>
+      </div>
+
+      <div class="step" id="more">
+        <h2>✨ More Interactive Elements</h2>
+
+        <div class="form-group">
+          <label>Buttons (regular):</label>
+          <button onclick="alert('Regular button clicked!')">Click Me</button>
+        </div>
+
+        <div class="form-group">
+          <label>Links:</label>
+          <a href="#test" onclick="alert('Link clicked!'); return false;">Test Link</a>
+        </div>
+
+        <div class="form-group">
+          <label>ContentEditable:</label>
+          <div class="contenteditable-box" contenteditable="true">
+            Click here and edit this text directly!
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Number Input:</label>
+          <input type="number" value="42" min="0" max="100">
+        </div>
+
+        <button data-dest="forms">← Back to Forms</button>
+        <button data-dest="welcome">← Start</button>
+      </div>
+
+    </div>
+  </div>
+
+  <script type="module">
+    import { JourneyVisualizer } from '../src/index.js';
+
+    const visualizer = new JourneyVisualizer('.journey-container', {
+      zoom: {
+        initial: 0.9,
+        min: 0.3,
+        max: 2
+      }
+    });
+
+    visualizer.init().then(() => {
+      console.log('✅ JourneyScript initialized with interactive elements support!');
+    });
+
+    // Test select element behavior
+    document.getElementById('color')?.addEventListener('change', (e) => {
+      console.log('Selected color:', e.target.value);
+    });
+
+    // Test input behavior
+    document.getElementById('name')?.addEventListener('input', (e) => {
+      console.log('Name input:', e.target.value);
+    });
+  </script>
+</body>
+</html>
