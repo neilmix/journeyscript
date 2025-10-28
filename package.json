@@ -8,21 +8,29 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "rollup -c",
-    "dev": "vite"
+    "dev": "vite",
+    "journey-build": "node tools/journey-build.js"
   },
-  "keywords": ["visualization", "journey", "graph", "ux"],
+  "keywords": [
+    "visualization",
+    "journey",
+    "graph",
+    "ux"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "dagre": "^0.8.5",
-    "@panzoom/panzoom": "^4.5.1"
+    "@panzoom/panzoom": "^4.5.1",
+    "dagre": "^0.8.5"
   },
   "devDependencies": {
-    "vitest": "^1.0.0",
-    "jsdom": "^23.0.0",
-    "vite": "^5.0.0",
-    "rollup": "^4.0.0",
+    "@rollup/plugin-commonjs": "^25.0.0",
     "@rollup/plugin-node-resolve": "^15.0.0",
-    "@rollup/plugin-commonjs": "^25.0.0"
+    "@types/markdown-it": "^14.1.2",
+    "jsdom": "^23.0.0",
+    "markdown-it": "^14.1.0",
+    "rollup": "^4.0.0",
+    "vite": "^5.0.0",
+    "vitest": "^1.0.0"
   }
 }
