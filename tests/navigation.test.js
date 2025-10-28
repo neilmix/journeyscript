@@ -1,49 +1,6 @@
 // tests/navigation.test.js
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { JourneyVisualizer } from '../src/JourneyVisualizer.js';
-
-vi.mock('@panzoom/panzoom', () => ({
-  default: vi.fn((element, options) => {
-    // Mock implementation that actually sets transforms
-    let scale = options?.startScale || 1;
-    let x = options?.startX || 0;
-    let y = options?.startY || 0;
-
-    const setTransform = (elem, values) => {
-      elem.style.transform = `matrix(${values.scale}, 0, 0, ${values.scale}, ${values.x}, ${values.y})`;
-    };
-
-    return {
-      pan: vi.fn((newX, newY, panOptions) => {
-        if (panOptions?.relative === false) {
-          x = newX;
-          y = newY;
-        } else {
-          x += newX;
-          y += newY;
-        }
-        setTransform(element, { scale, x, y });
-        return { x, y, scale };
-      }),
-      zoom: vi.fn((newScale, zoomOptions) => {
-        scale = newScale;
-        // Handle focal point if provided
-        if (zoomOptions?.focal) {
-          const focal = zoomOptions.focal;
-          // Simple focal point calculation (simplified from real Panzoom)
-          x = focal.x - (focal.x / scale);
-          y = focal.y - (focal.y / scale);
-        }
-        setTransform(element, { scale, x, y });
-        return { x, y, scale };
-      }),
-      zoomWithWheel: vi.fn(),
-      destroy: vi.fn(),
-      getScale: vi.fn(() => scale),
-      getPan: vi.fn(() => ({ x, y }))
-    };
-  })
-}));
 
 describe('Navigation', () => {
   beforeEach(() => {
@@ -139,14 +96,15 @@ describe('Navigation', () => {
     expect(state).toHaveProperty('totalSteps');
   });
 
-  it('should destroy panzoom instance with destroy()', () => {
+  it('should destroy zoom/pan controller with destroy()', () => {
     const visualizer = new JourneyVisualizer('.journey-container');
     visualizer._discoverSteps();
     visualizer._initializePanZoom();
 
-    const panzoomInstance = visualizer.panzoomInstance;
+    expect(visualizer.zoomPanController).toBeTruthy();
+
     visualizer.destroy();
 
-    expect(panzoomInstance.destroy).toHaveBeenCalled();
+    expect(visualizer.zoomPanController).toBeNull();
   });
 });

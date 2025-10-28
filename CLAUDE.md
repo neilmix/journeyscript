@@ -10,7 +10,7 @@ This project is developed in a Linux Docker container running on macOS host.
 - Port 8000 is forwarded from host to container - run servers on port 8000.
 - Automated browser tests use Chrome DevTools Protocol to control the host Chrome instance
 - To manually test: start server in container, open `http://localhost:8000` in host Chrome
-- Chrome CDP is accessible at host.docker.internal:9222 - but you must set Host: localhost:9222
+- Chrome CDP is accessible at host.docker.internal:9222 - but you must set the "Host" header to "localhost:9222"
 
 ### Testing Workflow
 1. Use simple HTTP server in project root (examples are in /examples)

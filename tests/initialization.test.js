@@ -2,16 +2,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { JourneyVisualizer } from '../src/JourneyVisualizer.js';
 
-vi.mock('@panzoom/panzoom', () => ({
-  default: vi.fn(() => ({
-    pan: vi.fn(),
-    zoom: vi.fn(),
-    zoomWithWheel: vi.fn(),
-    destroy: vi.fn(),
-    getScale: vi.fn(() => 1) // Required for _navigateToStart()
-  }))
-}));
-
 describe('Full Initialization', () => {
   beforeEach(() => {
     document.body.innerHTML = `
@@ -36,7 +26,7 @@ describe('Full Initialization', () => {
     expect(visualizer.steps.length).toBe(2);
     expect(visualizer.graph).toBeDefined();
     expect(visualizer.svgOverlay).toBeDefined();
-    expect(visualizer.panzoomInstance).toBeDefined();
+    expect(visualizer.zoomPanController).toBeDefined();
   });
 
   it('should emit layout-complete event', async () => {

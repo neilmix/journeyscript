@@ -1,6 +1,6 @@
 // src/JourneyVisualizer.js
 import dagre from 'dagre';
-import Panzoom from '@panzoom/panzoom';
+import { ZoomPanController } from './ZoomPanController.js';
 
 export class JourneyVisualizer {
   constructor(containerSelector, options = {}) {
@@ -13,7 +13,7 @@ export class JourneyVisualizer {
     this.options = this._mergeOptions(options);
     this.steps = [];
     this.graph = null;
-    this.panzoomInstance = null;
+    this.zoomPanController = null;
   }
 
   _mergeOptions(userOptions) {
@@ -300,139 +300,22 @@ export class JourneyVisualizer {
   _initializePanZoom() {
     const viewport = this.container.parentElement;
 
-    this.panzoomInstance = Panzoom(this.container, {
-      maxScale: this.options.zoom.max,
+    if (!viewport) {
+      console.warn('No viewport found for zoom/pan initialization');
+      return;
+    }
+
+    // Create zoom/pan controller with our options
+    this.zoomPanController = new ZoomPanController(this.container, viewport, {
       minScale: this.options.zoom.min,
-      step: this.options.zoom.step,
-      origin: '0 0',  // Keep at 0,0 for consistent math
-      startX: 0,
-      startY: 0,
-      disablePan: false,
-      disableZoom: false,
-      panOnlyWhenZoomed: false,
-      contain: 'none'  // Disable all containment constraints
+      maxScale: this.options.zoom.max,
+      step: this.options.zoom.step
     });
 
-    // Track if zoom is from wheel event
-    this._isWheelZoom = false;
-
-    // Counter to track in-progress wheel zoom operations
-    this._wheelZoomInProgress = 0;
-
-    // Listen for zoom changes to maintain viewport center
-    // Skip adjustment for wheel zooms (we handle those separately)
-    this.container.addEventListener('panzoomchange', (event) => {
-      // Always use actual DOM scale as source of truth, not Panzoom's internal state
-      const transform = window.getComputedStyle(this.container).transform;
-      const matrix = transform.match(/matrix\((.+)\)/);
-      if (!matrix) return;
-
-      const values = matrix[1].split(', ').map(parseFloat);
-      const actualScale = values[0];
-
-      // Check if scale actually changed
-      if (this._lastScale !== undefined && Math.abs(actualScale - this._lastScale) > 0.001) {
-        // Only adjust pan for programmatic zooms, not wheel zooms
-        if (this._wheelZoomInProgress === 0) {
-          this._adjustPanForZoom(this._lastScale, actualScale);
-        }
-      }
-
-      // Update last scale to actual DOM scale
-      this._lastScale = actualScale;
-    });
-
-    // Enable mouse wheel zoom on parent viewport with proper cursor-based zooming
-    if (viewport) {
-      const wheelHandler = (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        this._handleWheelZoom(event);
-      };
-      viewport.addEventListener('wheel', wheelHandler, { passive: false, capture: true });
-    }
-
-    // Store initial scale
-    this._lastScale = 1;
+    // Set cursor style for dragging
+    this.container.style.cursor = 'grab';
   }
 
-  _handleWheelZoom(event) {
-    // Increment counter to prevent _adjustPanForZoom from interfering
-    this._wheelZoomInProgress++;
-
-    // Get current state directly from DOM to ensure accuracy
-    const transform = window.getComputedStyle(this.container).transform;
-    const matrix = transform.match(/matrix\((.+)\)/);
-    if (!matrix) {
-      this._wheelZoomInProgress--;
-      return;
-    }
-
-    const values = matrix[1].split(', ').map(parseFloat);
-    const currentScale = values[0]; // a value in matrix(a, b, c, d, tx, ty)
-    const currentPanX = values[4]; // tx
-    const currentPanY = values[5]; // ty
-
-    // Calculate scale change
-    const delta = -event.deltaY;
-    const scaleChange = delta > 0 ? this.options.zoom.step : -this.options.zoom.step;
-    const newScale = Math.max(
-      this.options.zoom.min,
-      Math.min(this.options.zoom.max, currentScale + scaleChange)
-    );
-
-    // If scale didn't actually change, skip
-    if (newScale === currentScale) {
-      this._wheelZoomInProgress--;
-      return;
-    }
-
-    // Get focal point in viewport coordinates
-    const viewport = this.container.parentElement;
-    const viewportRect = viewport.getBoundingClientRect();
-    const focalX = event.clientX - viewportRect.left;
-    const focalY = event.clientY - viewportRect.top;
-
-    // Use Panzoom's zoom method with focal point option
-    // This properly updates both the transform and internal state
-    this.panzoomInstance.zoom(newScale, {
-      focal: { x: focalX, y: focalY },
-      animate: false,
-      force: true
-    });
-
-    // Decrement counter
-    this._wheelZoomInProgress--;
-  }
-
-  _adjustPanForZoom(oldScale, newScale) {
-    const viewport = this.container.parentElement;
-    if (!viewport) return;
-
-    // Get current pan from transform
-    const transform = window.getComputedStyle(this.container).transform;
-    const matrix = transform.match(/matrix\((.+)\)/);
-    if (!matrix) return;
-
-    const values = matrix[1].split(', ');
-    const oldPanX = parseFloat(values[4]);
-    const oldPanY = parseFloat(values[5]);
-
-    // Calculate viewport center
-    const vpCenterX = viewport.clientWidth / 2;
-    const vpCenterY = viewport.clientHeight / 2;
-
-    // Find the container point that was at viewport center
-    const containerCenterX = (vpCenterX - oldPanX) / oldScale;
-    const containerCenterY = (vpCenterY - oldPanY) / oldScale;
-
-    // Calculate new pan to keep same container point at viewport center
-    const newPanX = vpCenterX - containerCenterX * newScale;
-    const newPanY = vpCenterY - containerCenterY * newScale;
-
-    // Apply the adjusted transform directly
-    this.container.style.transform = `matrix(${newScale}, 0, 0, ${newScale}, ${newPanX}, ${newPanY})`;
-  }
 
   _findStartStep() {
     const startStep = this.container.querySelector('[data-place="start"]');
@@ -448,7 +331,7 @@ export class JourneyVisualizer {
   _navigateToStart() {
     const startStep = this._findStartStep();
 
-    if (!startStep || !this.panzoomInstance) {
+    if (!startStep || !this.zoomPanController) {
       return;
     }
 
@@ -458,23 +341,20 @@ export class JourneyVisualizer {
       return;
     }
 
-    // Use offset positions (untransformed coordinates) instead of getBoundingClientRect
+    // Set initial zoom
+    const scale = this.options.zoom.initial;
+    this.zoomPanController.zoom(scale, { animate: false });
+
+    // Use offset positions (untransformed coordinates)
     const stepCenterX = startStep.offsetLeft + startStep.offsetWidth / 2;
     const stepCenterY = startStep.offsetTop + startStep.offsetHeight / 2;
 
-    // Calculate target pan to center the step in the viewport at initial zoom
-    // Use clientWidth/clientHeight to get viewport size excluding borders/scrollbars
-    const scale = this.options.zoom.initial;
+    // Calculate target pan to center the step in the viewport
     const targetX = (viewport.clientWidth / 2) - (stepCenterX * scale);
     const targetY = (viewport.clientHeight / 2) - (stepCenterY * scale);
 
-    // Use Panzoom's pan API with relative:false for absolute positioning
-    // This keeps Panzoom's internal state in sync with the transform
-    this.panzoomInstance.pan(targetX, targetY, {
-      animate: false,
-      relative: false,
-      force: true
-    });
+    // Apply pan
+    this.zoomPanController.pan(targetX, targetY, { animate: false });
 
     // Add highlight to starting step
     startStep.classList.add('journey-step-current');
@@ -489,8 +369,8 @@ export class JourneyVisualizer {
       return;
     }
 
-    if (!this.panzoomInstance) {
-      console.warn('Panzoom not initialized');
+    if (!this.zoomPanController) {
+      console.warn('ZoomPanController not initialized');
       return;
     }
 
@@ -500,29 +380,27 @@ export class JourneyVisualizer {
       return;
     }
 
-    // Get current scale (or use specified zoom)
-    const scale = options.zoom || this.panzoomInstance.getScale();
+    // Set zoom if specified
+    if (options.zoom) {
+      this.zoomPanController.zoom(options.zoom, { animate: false });
+    }
 
-    // Use offset positions (untransformed coordinates) instead of getBoundingClientRect
+    // Get current scale
+    const scale = this.zoomPanController.getScale();
+
+    // Use offset positions (untransformed coordinates)
     const stepCenterX = step.offsetLeft + step.offsetWidth / 2;
     const stepCenterY = step.offsetTop + step.offsetHeight / 2;
 
     // Calculate target pan to center the step in the viewport
-    // Account for current scale: when scaled, positions are multiplied by scale
-    // Use clientWidth/clientHeight to get viewport size excluding borders/scrollbars
     const targetX = (viewport.clientWidth / 2) - (stepCenterX * scale);
     const targetY = (viewport.clientHeight / 2) - (stepCenterY * scale);
 
     // Apply animation if requested
     const animate = options.animate !== undefined ? options.animate : true;
 
-    // Use Panzoom's pan API with relative:false for absolute positioning
-    // This keeps Panzoom's internal state in sync with the transform
-    this.panzoomInstance.pan(targetX, targetY, {
-      animate: animate,
-      relative: false,
-      force: true
-    });
+    // Apply pan
+    this.zoomPanController.pan(targetX, targetY, { animate: animate });
 
     const previousStep = this.currentStep;
     this.currentStep = stepId;
@@ -577,15 +455,15 @@ export class JourneyVisualizer {
     return {
       currentStep: this.currentStep,
       totalSteps: this.steps.length,
-      scale: this.panzoomInstance ? this.panzoomInstance.getScale() : 1,
-      pan: this.panzoomInstance ? this.panzoomInstance.getPan() : { x: 0, y: 0 }
+      scale: this.zoomPanController ? this.zoomPanController.getScale() : 1,
+      pan: this.zoomPanController ? this.zoomPanController.getPan() : { x: 0, y: 0 }
     };
   }
 
   destroy() {
-    if (this.panzoomInstance) {
-      this.panzoomInstance.destroy();
-      this.panzoomInstance = null;
+    if (this.zoomPanController) {
+      this.zoomPanController.destroy();
+      this.zoomPanController = null;
     }
 
     if (this.svgOverlay && this.svgOverlay.parentNode) {

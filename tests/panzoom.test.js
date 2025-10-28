@@ -1,16 +1,6 @@
 // tests/panzoom.test.js
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { JourneyVisualizer } from '../src/JourneyVisualizer.js';
-
-// Mock panzoom
-vi.mock('@panzoom/panzoom', () => ({
-  default: vi.fn((element, options) => ({
-    pan: vi.fn(),
-    zoom: vi.fn(),
-    zoomWithWheel: vi.fn(),
-    destroy: vi.fn()
-  }))
-}));
 
 describe('Pan/Zoom', () => {
   beforeEach(() => {
@@ -23,9 +13,7 @@ describe('Pan/Zoom', () => {
     `;
   });
 
-  it('should initialize panzoom on container', async () => {
-    const Panzoom = (await import('@panzoom/panzoom')).default;
-
+  it('should initialize ZoomPanController on container', () => {
     const visualizer = new JourneyVisualizer('.journey-container');
     visualizer._discoverSteps();
     visualizer._buildGraph();
@@ -33,17 +21,14 @@ describe('Pan/Zoom', () => {
     visualizer._positionSteps();
     visualizer._initializePanZoom();
 
-    expect(Panzoom).toHaveBeenCalledWith(
-      visualizer.container,
-      expect.objectContaining({
-        maxScale: 3,
-        minScale: 0.1,
-        step: 0.1
-      })
-    );
+    expect(visualizer.zoomPanController).toBeDefined();
+    expect(visualizer.zoomPanController.getScale()).toBe(1);
+    expect(visualizer.zoomPanController.minScale).toBe(0.1);
+    expect(visualizer.zoomPanController.maxScale).toBe(3);
+    expect(visualizer.zoomPanController.zoomStep).toBe(0.1);
   });
 
-  it('should store panzoom instance', async () => {
+  it('should store zoom/pan controller instance', () => {
     const visualizer = new JourneyVisualizer('.journey-container');
     visualizer._discoverSteps();
     visualizer._buildGraph();
@@ -51,6 +36,6 @@ describe('Pan/Zoom', () => {
     visualizer._positionSteps();
     visualizer._initializePanZoom();
 
-    expect(visualizer.panzoomInstance).toBeDefined();
+    expect(visualizer.zoomPanController).toBeDefined();
   });
 });
