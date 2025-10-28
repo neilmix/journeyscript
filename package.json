@@ -1,21 +1,25 @@
 {
-  "name": "journey-visualizer",
+  "name": "journeyscript",
   "version": "0.1.0",
-  "description": "Interactive UX journey visualization engine",
+  "description": "Create interactive flow diagrams from markdown",
   "main": "src/index.js",
   "type": "module",
+  "bin": {
+    "journeyscript": "./tools/journey-build.js"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "rollup -c",
     "dev": "vite",
-    "journey-build": "node tools/journey-build.js"
+    "journeyscript": "node tools/journey-build.js"
   },
   "keywords": [
-    "visualization",
+    "markdown",
+    "flowchart",
+    "diagram",
     "journey",
-    "graph",
-    "ux"
+    "visualization"
   ],
   "author": "",
   "license": "MIT",

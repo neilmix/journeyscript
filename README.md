@@ -1,23 +1,129 @@
-# Journey Visualizer
+# JourneyScript
 
-Interactive HTML/JavaScript visualization engine for UX user journey documents.
+Create interactive flow diagrams from markdown.
 
-## Features
+## Quick Start
 
-- Automatic graph layout using Dagre.js
-- Pan and zoom navigation
-- Smooth transitions between steps
-- Handles complex flows with loops and branches
-- Arbitrary HTML content in steps
-- Minimal dependencies (~100KB)
+**Write markdown:**
+
+```markdown
+## Welcome
+
+This is the starting point of your journey.
+
+[Get Started](Step 2)
+
+## Step 2
+
+You're making progress!
+
+[Continue](Complete) [Go Back](Welcome)
+
+## Complete
+
+You've reached the end.
+
+[Restart](Welcome)
+```
+
+**Build it:**
+
+```bash
+npm run journeyscript simple.md
+```
+
+**Get:** An interactive, pannable, zoomable HTML diagram with automatic graph layout.
+
+Open `simple.html` in your browser to see your flow diagram come to life!
 
 ## Installation
 
 ```bash
-npm install journey-visualizer
+npm install journeyscript
 ```
 
-## Quick Start
+## Syntax
+
+JourneyScript uses simple markdown conventions to create flow diagrams:
+
+### Steps
+
+Any heading creates a step in your diagram:
+
+```markdown
+## Welcome
+## Step 2
+### Substep
+```
+
+- The **first heading** becomes the start of your flow
+- Heading text is converted to IDs (e.g., "Step 2" → `step-2`)
+
+### Navigation
+
+Markdown links create arrows between steps:
+
+```markdown
+[Get Started](Step 2)        <!-- Creates arrow to "Step 2" -->
+[Visit Docs](https://...)     <!-- External links stay as links -->
+```
+
+- If the link target matches a step heading → creates a navigation button
+- If it's an external URL → keeps it as a regular link
+- If the target doesn't exist → creates a no-op button (with warning)
+
+### Content
+
+Use standard markdown in your steps:
+
+```markdown
+## My Step
+
+This is **bold** and this is *italic*.
+
+- Item 1
+- Item 2
+
+[Next](Another Step)
+```
+
+Supports: **bold**, *italic*, `code`, lists, images, code blocks, and HTML.
+
+## Examples
+
+- **[simple.md](examples/simple.md)** - A minimal 3-step flow
+- **[complex.md](examples/complex.md)** - E-commerce checkout with 13 steps, multiple paths and loops
+- **[big.md](examples/big.md)** - Performance test with 150 steps
+
+Try them:
+
+```bash
+npm run journeyscript examples/simple.md
+npm run dev  # View examples at http://localhost:8000/examples/
+```
+
+## Command Line Usage
+
+```bash
+# Basic usage
+npm run journeyscript myflow.md
+
+# Creates myflow.html in the same directory
+```
+
+The generated HTML file is self-contained with:
+- Inlined styles and JavaScript
+- External CDN links for dependencies (dagre, panzoom)
+- Pan and zoom navigation
+- Automatic graph layout
+
+## For Developers
+
+### Embedding as a Library
+
+JourneyScript can also be used as a JavaScript library to create journey visualizations programmatically. See [docs/API.md](docs/API.md) for the full API reference.
+
+**Quick example:**
 
 ```html
 <div class="journey-viewport">
@@ -33,34 +139,33 @@ npm install journey-visualizer
 </div>
 
 <script type="module">
-  import { JourneyVisualizer } from 'journey-visualizer';
+  import { JourneyVisualizer } from 'journeyscript';
 
   const visualizer = new JourneyVisualizer('.journey-container');
   visualizer.init();
 </script>
 ```
 
-## HTML Conventions
+### Building
 
-- **Steps**: Use `class="step"` and unique `id` attributes
-- **Start step**: Add `data-place="start"` to one step
-- **Connections**: Add `data-dest="target-id"` to buttons/links
-
-## API
-
-See [docs/API.md](docs/API.md) for full API documentation.
-
-## Examples
-
-- `examples/simple.html` - Basic 3-step flow
-- `examples/branching.html` - Multiple paths
-- `examples/complex.html` - E-commerce flow with loops
-- `examples/stress.html` - 150 steps performance test
-
-Run examples:
 ```bash
-npm run dev
+npm run build  # Builds dist/journey-visualizer.umd.js
 ```
+
+### Testing
+
+```bash
+npm test         # Run all tests
+npm run test:watch  # Watch mode
+```
+
+## Features
+
+- **Automatic layout** - Uses Dagre.js for smart graph positioning
+- **Pan and zoom** - Smooth navigation for large diagrams
+- **Handles complexity** - Loops, branches, multiple paths
+- **Minimal dependencies** - ~100KB total
+- **Standard markdown** - No custom syntax to learn
 
 ## Browser Support
 

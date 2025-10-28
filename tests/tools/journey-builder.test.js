@@ -387,74 +387,77 @@ describe('Integration tests - simple.md', () => {
   });
 });
 
-describe('Integration tests - branching.md', () => {
-  let branchingMarkdown;
+describe('Integration tests - complex.md', () => {
+  let complexMarkdown;
 
   beforeEach(() => {
-    const examplesPath = path.resolve(__dirname, '../../examples/branching.md');
-    branchingMarkdown = fs.readFileSync(examplesPath, 'utf-8');
+    const examplesPath = path.resolve(__dirname, '../../examples/complex.md');
+    complexMarkdown = fs.readFileSync(examplesPath, 'utf-8');
   });
 
-  it('should parse branching.md correctly', () => {
-    const { steps, stepNames, htmlTitle } = parseMarkdown(branchingMarkdown);
+  it('should parse complex.md correctly', () => {
+    const { steps, stepNames, htmlTitle } = parseMarkdown(complexMarkdown);
 
-    expect(steps).toHaveLength(9);
-    expect(htmlTitle).toBe('Branching Journey');
+    expect(steps).toHaveLength(13);
+    expect(htmlTitle).toBe('Browse Products');
 
     // Check key step IDs
-    expect(steps.find(s => s.id === 'branching-journey')).toBeDefined();
-    expect(steps.find(s => s.id === 'landing-page')).toBeDefined();
-    expect(steps.find(s => s.id === 'sign-up')).toBeDefined();
-    expect(steps.find(s => s.id === 'log-in')).toBeDefined();
-    expect(steps.find(s => s.id === 'dashboard')).toBeDefined();
+    expect(steps.find(s => s.id === 'browse-products')).toBeDefined();
+    expect(steps.find(s => s.id === 'shopping-cart')).toBeDefined();
+    expect(steps.find(s => s.id === 'checkout')).toBeDefined();
+    expect(steps.find(s => s.id === 'payment')).toBeDefined();
+    expect(steps.find(s => s.id === 'order-confirmed')).toBeDefined();
   });
 
-  it('should generate HTML with all steps for branching.md', () => {
-    const { steps, stepNames, htmlTitle } = parseMarkdown(branchingMarkdown);
+  it('should generate HTML with all steps for complex.md', () => {
+    const { steps, stepNames, htmlTitle } = parseMarkdown(complexMarkdown);
     const html = generateHTML(steps, stepNames, htmlTitle, '', '');
 
     // Check all major steps are present
-    expect(html).toContain('id="branching-journey"');
-    expect(html).toContain('id="landing-page"');
-    expect(html).toContain('id="sign-up"');
-    expect(html).toContain('id="log-in"');
-    expect(html).toContain('id="email-verification"');
-    expect(html).toContain('id="reset-password"');
-    expect(html).toContain('id="dashboard"');
-    expect(html).toContain('id="profile"');
-    expect(html).toContain('id="settings"');
+    expect(html).toContain('id="browse-products"');
+    expect(html).toContain('id="product-details"');
+    expect(html).toContain('id="shopping-cart"');
+    expect(html).toContain('id="checkout"');
+    expect(html).toContain('id="guest-information"');
+    expect(html).toContain('id="sign-in"');
+    expect(html).toContain('id="payment"');
+    expect(html).toContain('id="order-confirmed"');
   });
 
-  it('should generate correct branching buttons for branching.md', () => {
-    const { steps, stepNames, htmlTitle } = parseMarkdown(branchingMarkdown);
+  it('should generate correct branching buttons for complex.md', () => {
+    const { steps, stepNames, htmlTitle } = parseMarkdown(complexMarkdown);
     const html = generateHTML(steps, stepNames, htmlTitle, '', '');
 
-    // Landing page branches
-    expect(html).toContain('<button data-dest="sign-up">Sign Up</button>');
-    expect(html).toContain('<button data-dest="log-in">Log In</button>');
+    // Browse Products branches
+    expect(html).toContain('<button data-dest="product-details">View Product</button>');
+    expect(html).toContain('<button data-dest="shopping-cart">View Cart</button>');
 
-    // Sign up flow
-    expect(html).toContain('<button data-dest="email-verification">Submit</button>');
-    expect(html).toContain('<button data-dest="landing-page">Cancel</button>');
+    // Checkout branches
+    expect(html).toContain('<button data-dest="guest-information">Guest Checkout</button>');
+    expect(html).toContain('<button data-dest="sign-in">Sign In</button>');
 
-    // Dashboard branches
-    expect(html).toContain('<button data-dest="profile">Profile</button>');
-    expect(html).toContain('<button data-dest="settings">Settings</button>');
+    // Review Order branches
+    expect(html).toContain('<button data-dest="processing">Place Order</button>');
+    expect(html).toContain('<button data-dest="payment">Edit Payment</button>');
   });
 
   it('should count exact number of steps', () => {
-    const { steps } = parseMarkdown(branchingMarkdown);
+    const { steps } = parseMarkdown(complexMarkdown);
 
     const expectedSteps = [
-      'Branching Journey',
-      'Landing Page',
-      'Sign Up',
-      'Log In',
-      'Email Verification',
-      'Reset Password',
-      'Dashboard',
-      'Profile',
-      'Settings'
+      'Browse Products',
+      'Product Details',
+      'Shopping Cart',
+      'Checkout',
+      'Guest Information',
+      'Sign In',
+      'Shipping Address',
+      'Delivery Method',
+      'Payment',
+      'Review Order',
+      'Processing',
+      'Payment Error',
+      'Order Confirmed'
     ];
 
     expect(steps).toHaveLength(expectedSteps.length);

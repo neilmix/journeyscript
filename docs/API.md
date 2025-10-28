@@ -1,4 +1,6 @@
-# API Documentation
+# JourneyScript API Documentation
+
+> This guide is for developers who want to embed JourneyScript visualizations programmatically in their applications. If you just want to create flow diagrams from markdown, see the [main README](../README.md).
 
 ## Constructor
 
