@@ -40,6 +40,9 @@ export class ZoomPanController {
     this._handlePointerMove = this._handlePointerMove.bind(this);
     this._handlePointerUp = this._handlePointerUp.bind(this);
 
+    // Set transform origin to top-left so our math works correctly
+    this.element.style.transformOrigin = '0 0';
+
     // Initialize
     this._attachEventListeners();
     this._applyTransform();
