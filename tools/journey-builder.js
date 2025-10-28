@@ -25,6 +25,7 @@ export function isExternalUrl(url) {
 export function parseMarkdown(markdown) {
   const steps = [];
   let htmlTitle = null;
+  let preamble = ''; // Content before first heading
   const stepNames = new Map(); // Map step names to IDs
 
   // Split markdown by headings
@@ -40,6 +41,9 @@ export function parseMarkdown(markdown) {
     if (parts.length > 0) {
       // Add content to previous heading
       parts[parts.length - 1].content = contentBefore;
+    } else {
+      // This is content before the first heading - save as preamble
+      preamble = contentBefore;
     }
 
     // Add this heading
@@ -81,7 +85,7 @@ export function parseMarkdown(markdown) {
     });
   });
 
-  return { steps, stepNames, htmlTitle: htmlTitle || 'Journey' };
+  return { steps, stepNames, htmlTitle: htmlTitle || 'Journey', preamble };
 }
 
 // Convert markdown content to HTML with smart link detection
@@ -152,7 +156,7 @@ export function renderStepContent(markdown, stepNames) {
 }
 
 // Generate HTML output
-export function generateHTML(steps, stepNames, htmlTitle, cssContent, jsContent) {
+export function generateHTML(steps, stepNames, htmlTitle, cssContent, jsContent, preamble = '') {
   const stepElements = steps.map((step, index) => {
     const content = renderStepContent(step.content, stepNames);
     const dataPlace = step.isFirst ? ' data-place="start"' : '';
@@ -162,6 +166,9 @@ export function generateHTML(steps, stepNames, htmlTitle, cssContent, jsContent)
 ${content.split('\n').map(line => '        ' + line).join('\n')}
       </div>`;
   }).join('\n\n');
+
+  // If preamble exists, add it at the start of body
+  const preambleSection = preamble ? `  ${preamble}\n\n` : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -174,7 +181,7 @@ ${cssContent}
   </style>
 </head>
 <body>
-  <div class="journey-viewport">
+${preambleSection}  <div class="journey-viewport">
     <div class="journey-container">
 ${stepElements}
     </div>

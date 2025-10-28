@@ -179,6 +179,44 @@ More content.`;
 
     warnSpy.mockRestore();
   });
+
+  it('should capture content before first heading as preamble', () => {
+    const markdown = `<style>
+button.custom {
+  color: red;
+}
+</style>
+
+Some intro text before any headings.
+
+## First Step
+
+This is the first step content.
+
+## Second Step
+
+This is the second step content.`;
+
+    const { steps, preamble } = parseMarkdown(markdown);
+
+    expect(preamble).toBeDefined();
+    expect(preamble).toContain('<style>');
+    expect(preamble).toContain('button.custom');
+    expect(preamble).toContain('Some intro text before any headings.');
+    expect(steps).toHaveLength(2);
+    expect(steps[0].title).toBe('First Step');
+    expect(steps[0].content).toBe('This is the first step content.');
+  });
+
+  it('should handle empty preamble when markdown starts with heading', () => {
+    const markdown = `## First Step
+
+Content here.`;
+
+    const { preamble } = parseMarkdown(markdown);
+
+    expect(preamble).toBe('');
+  });
 });
 
 describe('renderStepContent', () => {
@@ -319,7 +357,7 @@ describe('generateHTML', () => {
       { id: 'welcome', title: 'Welcome', content: 'Hello', isFirst: true }
     ];
     const stepNames = new Map([['Welcome', 'welcome']]);
-    const html = generateHTML(steps, stepNames, 'Test Journey', 'body{}', '//js');
+    const html = generateHTML(steps, stepNames, 'Test Journey', 'body{}', '//js', '');
 
     expect(html).toContain('<!DOCTYPE html>');
     expect(html).toContain('<html lang="en">');
@@ -335,7 +373,7 @@ describe('generateHTML', () => {
       { id: 'step3', title: 'Step 3', content: 'Content 3', isFirst: false }
     ];
     const stepNames = new Map();
-    const html = generateHTML(steps, stepNames, 'Test', '', '');
+    const html = generateHTML(steps, stepNames, 'Test', '', '', '');
 
     expect(html).toContain('id="step1"');
     expect(html).toContain('id="step2"');
@@ -351,7 +389,7 @@ describe('generateHTML', () => {
       { id: 'next', title: 'Next', content: '', isFirst: false }
     ];
     const stepNames = new Map();
-    const html = generateHTML(steps, stepNames, 'Test', '', '');
+    const html = generateHTML(steps, stepNames, 'Test', '', '', '');
 
     expect(html).toContain('id="welcome" data-place="start"');
     expect(html).toMatch(/id="next"[^>]*>/);
@@ -361,7 +399,7 @@ describe('generateHTML', () => {
   it('should include CDN script tags', () => {
     const steps = [{ id: 'test', title: 'Test', content: '', isFirst: true }];
     const stepNames = new Map();
-    const html = generateHTML(steps, stepNames, 'Test', '', '');
+    const html = generateHTML(steps, stepNames, 'Test', '', '', '');
 
     expect(html).toContain('https://unpkg.com/dagre@0.8.5/dist/dagre.min.js');
     expect(html).toContain('https://unpkg.com/@panzoom/panzoom@4.5.1/dist/panzoom.min.js');
@@ -370,10 +408,33 @@ describe('generateHTML', () => {
   it('should include visualizer initialization', () => {
     const steps = [{ id: 'test', title: 'Test', content: '', isFirst: true }];
     const stepNames = new Map();
-    const html = generateHTML(steps, stepNames, 'Test', '', '');
+    const html = generateHTML(steps, stepNames, 'Test', '', '', '');
 
     expect(html).toContain('new JourneyVisualizer.JourneyVisualizer');
     expect(html).toContain('.init()');
+  });
+
+  it('should include preamble content in HTML body', () => {
+    const steps = [{ id: 'test', title: 'Test', content: 'Step content', isFirst: true }];
+    const stepNames = new Map();
+    const preamble = '<style>\nbutton { color: red; }\n</style>\n\n<script>console.log("preamble");</script>';
+    const html = generateHTML(steps, stepNames, 'Test', 'body{}', '//js', preamble);
+
+    // Preamble should be in the body, before the journey-viewport
+    expect(html).toContain(preamble);
+    const preambleIndex = html.indexOf(preamble);
+    const viewportIndex = html.indexOf('<div class="journey-viewport">');
+    expect(preambleIndex).toBeGreaterThan(0);
+    expect(preambleIndex).toBeLessThan(viewportIndex);
+  });
+
+  it('should handle empty preamble gracefully', () => {
+    const steps = [{ id: 'test', title: 'Test', content: '', isFirst: true }];
+    const stepNames = new Map();
+    const html = generateHTML(steps, stepNames, 'Test', '', '', '');
+
+    expect(html).toContain('<!DOCTYPE html>');
+    expect(html).toContain('<div class="journey-viewport">');
   });
 });
 
@@ -408,8 +469,8 @@ describe('Integration tests - simple.md', () => {
   });
 
   it('should generate HTML with correct structure for simple.md', () => {
-    const { steps, stepNames, htmlTitle } = parseMarkdown(simpleMarkdown);
-    const html = generateHTML(steps, stepNames, htmlTitle, 'body{}', '//test');
+    const { steps, stepNames, htmlTitle, preamble } = parseMarkdown(simpleMarkdown);
+    const html = generateHTML(steps, stepNames, htmlTitle, 'body{}', '//test', preamble || '');
 
     // Check title
     expect(html).toContain('<title>Welcome - Journey Visualizer</title>');
@@ -426,8 +487,8 @@ describe('Integration tests - simple.md', () => {
   });
 
   it('should generate correct buttons for simple.md', () => {
-    const { steps, stepNames, htmlTitle } = parseMarkdown(simpleMarkdown);
-    const html = generateHTML(steps, stepNames, htmlTitle, '', '');
+    const { steps, stepNames, htmlTitle, preamble } = parseMarkdown(simpleMarkdown);
+    const html = generateHTML(steps, stepNames, htmlTitle, '', '', preamble || '');
 
     // Welcome -> Step 2
     expect(html).toContain('<button data-dest="step-2">Get Started</button>');
@@ -464,8 +525,8 @@ describe('Integration tests - complex.md', () => {
   });
 
   it('should generate HTML with all steps for complex.md', () => {
-    const { steps, stepNames, htmlTitle } = parseMarkdown(complexMarkdown);
-    const html = generateHTML(steps, stepNames, htmlTitle, '', '');
+    const { steps, stepNames, htmlTitle, preamble } = parseMarkdown(complexMarkdown);
+    const html = generateHTML(steps, stepNames, htmlTitle, '', '', preamble || '');
 
     // Check all major steps are present
     expect(html).toContain('id="browse-products"');
@@ -479,8 +540,8 @@ describe('Integration tests - complex.md', () => {
   });
 
   it('should generate correct branching buttons for complex.md', () => {
-    const { steps, stepNames, htmlTitle } = parseMarkdown(complexMarkdown);
-    const html = generateHTML(steps, stepNames, htmlTitle, '', '');
+    const { steps, stepNames, htmlTitle, preamble } = parseMarkdown(complexMarkdown);
+    const html = generateHTML(steps, stepNames, htmlTitle, '', '', preamble || '');
 
     // Browse Products branches
     expect(html).toContain('<button data-dest="product-details">View Product</button>');

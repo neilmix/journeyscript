@@ -29,7 +29,7 @@ function main() {
   const markdown = fs.readFileSync(inputPath, 'utf-8');
 
   // Parse markdown
-  const { steps, stepNames, htmlTitle } = parseMarkdown(markdown);
+  const { steps, stepNames, htmlTitle, preamble } = parseMarkdown(markdown);
 
   if (steps.length === 0) {
     console.error('Error: No headings found in markdown file');
@@ -58,7 +58,7 @@ function main() {
   const jsContent = fs.readFileSync(jsPath, 'utf-8');
 
   // Generate HTML
-  const html = generateHTML(steps, stepNames, htmlTitle, cssContent, jsContent);
+  const html = generateHTML(steps, stepNames, htmlTitle, cssContent, jsContent, preamble);
 
   // Write output
   const outputPath = inputPath.replace(/\.md$/, '.html');
