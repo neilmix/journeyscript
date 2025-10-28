@@ -429,18 +429,19 @@ body {
       // Track if zoom is from wheel event
       this._isWheelZoom = false;
 
+      // Counter to track in-progress wheel zoom operations
+      this._wheelZoomInProgress = 0;
+
       // Listen for zoom changes to maintain viewport center
       // Skip adjustment for wheel zooms (we handle those separately)
       this.container.addEventListener('panzoomchange', (event) => {
         if (event.detail && this._lastScale !== undefined && event.detail.scale !== this._lastScale) {
           // Only adjust pan for programmatic zooms, not wheel zooms
-          if (!this._isWheelZoom) {
+          if (this._wheelZoomInProgress === 0) {
             this._adjustPanForZoom(this._lastScale, event.detail.scale);
           }
         }
         this._lastScale = event.detail ? event.detail.scale : 1;
-        // Reset wheel zoom flag after handling
-        this._isWheelZoom = false;
       });
 
       // Enable mouse wheel zoom on parent viewport with proper cursor-based zooming
@@ -458,20 +459,23 @@ body {
     }
 
     _handleWheelZoom(event) {
-      const viewport = this.container.parentElement;
-      if (!viewport) return;
+      // Increment counter to prevent _adjustPanForZoom from interfering
+      this._wheelZoomInProgress++;
 
-      // Get current transform state
+      // Get current state directly from DOM to ensure accuracy
       const transform = window.getComputedStyle(this.container).transform;
       const matrix = transform.match(/matrix\((.+)\)/);
-      if (!matrix) return;
+      if (!matrix) {
+        this._wheelZoomInProgress--;
+        return;
+      }
 
       const values = matrix[1].split(', ').map(parseFloat);
-      const currentScale = values[0];
-      const currentPanX = values[4];
-      const currentPanY = values[5];
+      const currentScale = values[0]; // a value in matrix(a, b, c, d, tx, ty)
+      const currentPanX = values[4]; // tx
+      const currentPanY = values[5]; // ty
 
-      // Calculate new scale based on wheel delta
+      // Calculate scale change
       const delta = -event.deltaY;
       const scaleChange = delta > 0 ? this.options.zoom.step : -this.options.zoom.step;
       const newScale = Math.max(
@@ -479,36 +483,39 @@ body {
         Math.min(this.options.zoom.max, currentScale + scaleChange)
       );
 
-      // If scale didn't change (hit min/max), do nothing
-      if (newScale === currentScale) return;
+      // If scale didn't actually change, skip
+      if (newScale === currentScale) {
+        this._wheelZoomInProgress--;
+        return;
+      }
 
-      // Get cursor position in viewport coordinates
+      // Get focal point in viewport coordinates
+      const viewport = this.container.parentElement;
       const viewportRect = viewport.getBoundingClientRect();
-      const cursorX = event.clientX - viewportRect.left;
-      const cursorY = event.clientY - viewportRect.top;
+      const focalX = event.clientX - viewportRect.left;
+      const focalY = event.clientY - viewportRect.top;
 
-      // Convert cursor position to container coordinates (the point we want to zoom to)
-      const containerPointX = (cursorX - currentPanX) / currentScale;
-      const containerPointY = (cursorY - currentPanY) / currentScale;
+      // Calculate the container point under the cursor
+      // Transform from viewport coords to container coords
+      const containerX = (focalX - currentPanX) / currentScale;
+      const containerY = (focalY - currentPanY) / currentScale;
 
-      // Calculate new pan to keep the container point under the cursor
-      const newPanX = cursorX - containerPointX * newScale;
-      const newPanY = cursorY - containerPointY * newScale;
+      // Calculate new pan to keep that container point at the cursor position
+      const newPanX = focalX - containerX * newScale;
+      const newPanY = focalY - containerY * newScale;
 
-      // Set flag to prevent additional pan adjustment
-      this._isWheelZoom = true;
-
-      // Apply the new transform
+      // Apply both transform values atomically by directly setting the transform
+      // This bypasses Panzoom's internal state management but keeps everything in sync
       this.container.style.transform = `matrix(${newScale}, 0, 0, ${newScale}, ${newPanX}, ${newPanY})`;
 
-      // Update last scale
-      this._lastScale = newScale;
-
-      // Dispatch panzoomchange event for consistency
+      // Manually trigger panzoomchange event to sync Panzoom's internal state
       const changeEvent = new CustomEvent('panzoomchange', {
-        detail: { scale: newScale, x: newPanX, y: newPanY }
+        detail: { x: newPanX, y: newPanY, scale: newScale }
       });
       this.container.dispatchEvent(changeEvent);
+
+      // Decrement counter
+      this._wheelZoomInProgress--;
     }
 
     _adjustPanForZoom(oldScale, newScale) {
@@ -568,14 +575,19 @@ body {
       const stepCenterX = startStep.offsetLeft + startStep.offsetWidth / 2;
       const stepCenterY = startStep.offsetTop + startStep.offsetHeight / 2;
 
-      // Calculate pan to center the step in the viewport at initial zoom
+      // Calculate target pan to center the step in the viewport at initial zoom
       // Use clientWidth/clientHeight to get viewport size excluding borders/scrollbars
       const scale = this.options.zoom.initial;
-      const x = (viewport.clientWidth / 2) - (stepCenterX * scale);
-      const y = (viewport.clientHeight / 2) - (stepCenterY * scale);
+      const targetX = (viewport.clientWidth / 2) - (stepCenterX * scale);
+      const targetY = (viewport.clientHeight / 2) - (stepCenterY * scale);
 
-      // Directly set the transform
-      this.container.style.transform = `matrix(${scale}, 0, 0, ${scale}, ${x}, ${y})`;
+      // Use Panzoom's pan API with relative:false for absolute positioning
+      // This keeps Panzoom's internal state in sync with the transform
+      this.panzoomInstance.pan(targetX, targetY, {
+        animate: false,
+        relative: false,
+        force: true
+      });
 
       // Add highlight to starting step
       startStep.classList.add('journey-step-current');
@@ -608,27 +620,22 @@ body {
       const stepCenterX = step.offsetLeft + step.offsetWidth / 2;
       const stepCenterY = step.offsetTop + step.offsetHeight / 2;
 
-      // Calculate pan to center the step in the viewport
+      // Calculate target pan to center the step in the viewport
       // Account for current scale: when scaled, positions are multiplied by scale
       // Use clientWidth/clientHeight to get viewport size excluding borders/scrollbars
-      const x = (viewport.clientWidth / 2) - (stepCenterX * scale);
-      const y = (viewport.clientHeight / 2) - (stepCenterY * scale);
+      const targetX = (viewport.clientWidth / 2) - (stepCenterX * scale);
+      const targetY = (viewport.clientHeight / 2) - (stepCenterY * scale);
 
       // Apply animation if requested
       const animate = options.animate !== undefined ? options.animate : true;
-      if (animate) {
-        this.container.style.transition = 'transform 0.3s ease-in-out';
-      }
 
-      // Apply the transform directly to center the step
-      this.container.style.transform = `matrix(${scale}, 0, 0, ${scale}, ${x}, ${y})`;
-
-      if (animate) {
-        // Remove transition after animation completes
-        setTimeout(() => {
-          this.container.style.transition = '';
-        }, 300);
-      }
+      // Use Panzoom's pan API with relative:false for absolute positioning
+      // This keeps Panzoom's internal state in sync with the transform
+      this.panzoomInstance.pan(targetX, targetY, {
+        animate: animate,
+        relative: false,
+        force: true
+      });
 
       const previousStep = this.currentStep;
       this.currentStep = stepId;
