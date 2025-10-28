@@ -322,13 +322,24 @@ export class JourneyVisualizer {
     // Listen for zoom changes to maintain viewport center
     // Skip adjustment for wheel zooms (we handle those separately)
     this.container.addEventListener('panzoomchange', (event) => {
-      if (event.detail && this._lastScale !== undefined && event.detail.scale !== this._lastScale) {
+      // Always use actual DOM scale as source of truth, not Panzoom's internal state
+      const transform = window.getComputedStyle(this.container).transform;
+      const matrix = transform.match(/matrix\((.+)\)/);
+      if (!matrix) return;
+
+      const values = matrix[1].split(', ').map(parseFloat);
+      const actualScale = values[0];
+
+      // Check if scale actually changed
+      if (this._lastScale !== undefined && Math.abs(actualScale - this._lastScale) > 0.001) {
         // Only adjust pan for programmatic zooms, not wheel zooms
         if (this._wheelZoomInProgress === 0) {
-          this._adjustPanForZoom(this._lastScale, event.detail.scale);
+          this._adjustPanForZoom(this._lastScale, actualScale);
         }
       }
-      this._lastScale = event.detail ? event.detail.scale : 1;
+
+      // Update last scale to actual DOM scale
+      this._lastScale = actualScale;
     });
 
     // Enable mouse wheel zoom on parent viewport with proper cursor-based zooming
@@ -382,24 +393,13 @@ export class JourneyVisualizer {
     const focalX = event.clientX - viewportRect.left;
     const focalY = event.clientY - viewportRect.top;
 
-    // Calculate the container point under the cursor
-    // Transform from viewport coords to container coords
-    const containerX = (focalX - currentPanX) / currentScale;
-    const containerY = (focalY - currentPanY) / currentScale;
-
-    // Calculate new pan to keep that container point at the cursor position
-    const newPanX = focalX - containerX * newScale;
-    const newPanY = focalY - containerY * newScale;
-
-    // Apply both transform values atomically by directly setting the transform
-    // This bypasses Panzoom's internal state management but keeps everything in sync
-    this.container.style.transform = `matrix(${newScale}, 0, 0, ${newScale}, ${newPanX}, ${newPanY})`;
-
-    // Manually trigger panzoomchange event to sync Panzoom's internal state
-    const changeEvent = new CustomEvent('panzoomchange', {
-      detail: { x: newPanX, y: newPanY, scale: newScale }
+    // Use Panzoom's zoom method with focal point option
+    // This properly updates both the transform and internal state
+    this.panzoomInstance.zoom(newScale, {
+      focal: { x: focalX, y: focalY },
+      animate: false,
+      force: true
     });
-    this.container.dispatchEvent(changeEvent);
 
     // Decrement counter
     this._wheelZoomInProgress--;
