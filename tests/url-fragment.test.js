@@ -100,4 +100,64 @@ describe('URL Fragment Navigation', () => {
     const completeElement = document.getElementById('complete');
     expect(completeElement.classList.contains('journey-step-current')).toBe(true);
   });
+
+  it('should update URL fragment when navigating to a step', async () => {
+    // Mock window.location and window.history
+    const mockReplaceState = vi.fn();
+    delete window.location;
+    window.location = { hash: '' };
+    window.history = { replaceState: mockReplaceState };
+
+    const visualizer = new JourneyVisualizer('.journey-container');
+    await visualizer.init();
+
+    // Initially at welcome
+    expect(visualizer.currentStep).toBe('welcome');
+
+    // Navigate to step-2
+    visualizer.navigateTo('step-2');
+
+    // Should update URL fragment via replaceState
+    expect(mockReplaceState).toHaveBeenCalledWith(null, '', '#step-2');
+  });
+
+  it('should update URL fragment when navigating between multiple steps', async () => {
+    // Mock window.location and window.history
+    const mockReplaceState = vi.fn();
+    delete window.location;
+    window.location = { hash: '' };
+    window.history = { replaceState: mockReplaceState };
+
+    const visualizer = new JourneyVisualizer('.journey-container');
+    await visualizer.init();
+
+    // Navigate through multiple steps
+    visualizer.navigateTo('step-2');
+    expect(mockReplaceState).toHaveBeenCalledWith(null, '', '#step-2');
+
+    visualizer.navigateTo('complete');
+    expect(mockReplaceState).toHaveBeenCalledWith(null, '', '#complete');
+
+    visualizer.navigateTo('welcome');
+    expect(mockReplaceState).toHaveBeenCalledWith(null, '', '#welcome');
+
+    // Should have been called 3 times
+    expect(mockReplaceState).toHaveBeenCalledTimes(3);
+  });
+
+  it('should fallback to window.location.hash if history.replaceState is not available', async () => {
+    // Mock window.location without history.replaceState
+    delete window.location;
+    window.location = { hash: '' };
+    window.history = undefined;
+
+    const visualizer = new JourneyVisualizer('.journey-container');
+    await visualizer.init();
+
+    // Navigate to step-2
+    visualizer.navigateTo('step-2');
+
+    // Should update via window.location.hash
+    expect(window.location.hash).toBe('step-2');
+  });
 });

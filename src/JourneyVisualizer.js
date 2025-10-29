@@ -440,6 +440,13 @@ export class JourneyVisualizer {
       }, 1000);
     }
 
+    // Update URL fragment
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState(null, '', `#${stepId}`);
+    } else {
+      window.location.hash = stepId;
+    }
+
     // Emit navigate event
     this._emit('navigate', { from: previousStep, to: stepId });
   }

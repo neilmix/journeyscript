@@ -147,4 +147,95 @@ describe('Browser URL Fragment Navigation', () => {
 
     expect(result.result.value).toBe('welcome');
   }, 10000);
+
+  it('should update URL fragment when clicking navigation button', async () => {
+    // Navigate to page without URL fragment
+    await browser.Page.navigate({ url: `http://localhost:${port}/examples/test-url-fragment.html` });
+
+    // Wait for page to load
+    await new Promise((resolve) => {
+      browser.Page.loadEventFired(() => resolve());
+    });
+
+    // Wait a bit for JavaScript to initialize
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Click the button to navigate to step-2
+    await browser.Runtime.evaluate({
+      expression: `
+        (function() {
+          const button = document.querySelector('[data-dest="step-2"]');
+          button.click();
+        })()
+      `
+    });
+
+    // Wait for navigation to complete
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Check URL has been updated with the fragment
+    const urlResult = await browser.Runtime.evaluate({
+      expression: `window.location.hash`
+    });
+
+    expect(urlResult.result.value).toBe('#step-2');
+
+    // Also verify the current step
+    const stepResult = await browser.Runtime.evaluate({
+      expression: `
+        (function() {
+          const currentStep = document.querySelector('.journey-step-current');
+          return currentStep ? currentStep.id : null;
+        })()
+      `
+    });
+
+    expect(stepResult.result.value).toBe('step-2');
+  }, 10000);
+
+  it('should update URL fragment when navigating through multiple steps', async () => {
+    // Navigate to page
+    await browser.Page.navigate({ url: `http://localhost:${port}/examples/test-url-fragment.html` });
+
+    // Wait for page to load
+    await new Promise((resolve) => {
+      browser.Page.loadEventFired(() => resolve());
+    });
+
+    // Wait a bit for JavaScript to initialize
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Navigate to step-2
+    await browser.Runtime.evaluate({
+      expression: `document.querySelector('[data-dest="step-2"]').click()`
+    });
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    let urlResult = await browser.Runtime.evaluate({
+      expression: `window.location.hash`
+    });
+    expect(urlResult.result.value).toBe('#step-2');
+
+    // Navigate to complete
+    await browser.Runtime.evaluate({
+      expression: `document.querySelector('[data-dest="complete"]').click()`
+    });
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    urlResult = await browser.Runtime.evaluate({
+      expression: `window.location.hash`
+    });
+    expect(urlResult.result.value).toBe('#complete');
+
+    // Navigate back to welcome
+    await browser.Runtime.evaluate({
+      expression: `document.querySelector('[data-dest="welcome"]').click()`
+    });
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    urlResult = await browser.Runtime.evaluate({
+      expression: `window.location.hash`
+    });
+    expect(urlResult.result.value).toBe('#welcome');
+  }, 15000);
 });
