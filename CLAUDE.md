@@ -57,4 +57,5 @@ guide you.
 
 ## Other Notes
 
-Make sure to build the dist directory when you've completed your work.
+- Make sure to build the dist directory when you've completed your work.
+- Do not add test HTML files to the examples directory - put them somewhere under tests/ instead.

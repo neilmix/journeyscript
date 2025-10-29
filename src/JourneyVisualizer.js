@@ -324,9 +324,24 @@ export class JourneyVisualizer {
   }
 
   _navigateToStart() {
-    const startStep = this._findStartStep();
+    // Check for URL fragment first
+    const urlFragment = this._getUrlFragment();
+    let targetStep = null;
 
-    if (!startStep || !this.zoomPanController) {
+    if (urlFragment) {
+      // Try to find step matching the URL fragment
+      const fragmentStep = document.getElementById(urlFragment);
+      if (fragmentStep && this.steps.includes(fragmentStep)) {
+        targetStep = fragmentStep;
+      }
+    }
+
+    // Fall back to start step if no valid fragment
+    if (!targetStep) {
+      targetStep = this._findStartStep();
+    }
+
+    if (!targetStep || !this.zoomPanController) {
       return;
     }
 
@@ -341,8 +356,8 @@ export class JourneyVisualizer {
     this.zoomPanController.zoom(scale, { animate: false });
 
     // Use offset positions (untransformed coordinates)
-    const stepCenterX = startStep.offsetLeft + startStep.offsetWidth / 2;
-    const stepCenterY = startStep.offsetTop + startStep.offsetHeight / 2;
+    const stepCenterX = targetStep.offsetLeft + targetStep.offsetWidth / 2;
+    const stepCenterY = targetStep.offsetTop + targetStep.offsetHeight / 2;
 
     // Calculate target pan to center the step in the viewport
     const targetX = (viewport.clientWidth / 2) - (stepCenterX * scale);
@@ -352,7 +367,13 @@ export class JourneyVisualizer {
     this.zoomPanController.pan(targetX, targetY, { animate: false });
 
     // Add highlight to starting step
-    startStep.classList.add('journey-step-current');
+    targetStep.classList.add('journey-step-current');
+  }
+
+  _getUrlFragment() {
+    // Get URL fragment without the # prefix
+    const hash = window.location.hash;
+    return hash ? hash.substring(1) : '';
   }
 
   // Public API methods
@@ -512,7 +533,18 @@ export class JourneyVisualizer {
       await new Promise(resolve => setTimeout(resolve, 0));
       this._navigateToStart();
 
-      this.currentStep = this._findStartStep().id;
+      // Set currentStep based on URL fragment or start step
+      const urlFragment = this._getUrlFragment();
+      if (urlFragment) {
+        const fragmentStep = document.getElementById(urlFragment);
+        if (fragmentStep && this.steps.includes(fragmentStep)) {
+          this.currentStep = fragmentStep.id;
+        } else {
+          this.currentStep = this._findStartStep().id;
+        }
+      } else {
+        this.currentStep = this._findStartStep().id;
+      }
 
       console.timeEnd('journey-init');
       this._emit('layout-complete');

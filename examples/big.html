@@ -58,6 +58,11 @@ body {
   background: #0056b3;
 }
 
+.step button:disabled {
+  background: #cccccc;
+  cursor: not-allowed;
+}
+
 .journey-step-highlight {
   animation: highlight 1s ease-in-out;
 }
@@ -1249,6 +1254,12 @@ body {
       // Only handle primary button (left click / touch)
       if (event.button !== 0) return;
 
+      // Don't interfere with interactive elements
+      const target = event.target;
+      if (this._isInteractiveElement(target)) {
+        return;
+      }
+
       // Start dragging
       this.isDragging = true;
       this.dragStartX = event.clientX;
@@ -1261,6 +1272,14 @@ body {
 
       // Change cursor
       this.element.style.cursor = 'grabbing';
+    }
+
+    _isInteractiveElement(element) {
+      // Check if element is a form control or other interactive element
+      if (element.matches) {
+        return element.matches('select, input, textarea, button, a, [contenteditable], [data-dest]');
+      }
+      return false;
     }
 
     _handlePointerMove(event) {
@@ -1427,28 +1446,23 @@ body {
     _discoverSteps() {
       const stepElements = this.container.querySelectorAll('.step');
       const stepIds = new Set();
-      const errors = [];
 
       stepElements.forEach(stepElement => {
         // Validate ID exists
         if (!stepElement.id) {
-          errors.push(`Step missing ID: ${stepElement.outerHTML.substring(0, 50)}...`);
+          console.warn(`Step missing ID: ${stepElement.outerHTML.substring(0, 50)}...`);
           return;
         }
 
         // Validate ID is unique
         if (stepIds.has(stepElement.id)) {
-          errors.push(`Duplicate step ID: ${stepElement.id}`);
+          console.warn(`Duplicate step ID: ${stepElement.id}`);
           return;
         }
 
         stepIds.add(stepElement.id);
         this.steps.push(stepElement);
       });
-
-      if (errors.length > 0) {
-        throw new Error(errors.join('\n'));
-      }
 
       if (this.steps.length === 0) {
         throw new Error('No steps found with class="step"');
@@ -1704,9 +1718,24 @@ body {
     }
 
     _navigateToStart() {
-      const startStep = this._findStartStep();
+      // Check for URL fragment first
+      const urlFragment = this._getUrlFragment();
+      let targetStep = null;
 
-      if (!startStep || !this.zoomPanController) {
+      if (urlFragment) {
+        // Try to find step matching the URL fragment
+        const fragmentStep = document.getElementById(urlFragment);
+        if (fragmentStep && this.steps.includes(fragmentStep)) {
+          targetStep = fragmentStep;
+        }
+      }
+
+      // Fall back to start step if no valid fragment
+      if (!targetStep) {
+        targetStep = this._findStartStep();
+      }
+
+      if (!targetStep || !this.zoomPanController) {
         return;
       }
 
@@ -1721,8 +1750,8 @@ body {
       this.zoomPanController.zoom(scale, { animate: false });
 
       // Use offset positions (untransformed coordinates)
-      const stepCenterX = startStep.offsetLeft + startStep.offsetWidth / 2;
-      const stepCenterY = startStep.offsetTop + startStep.offsetHeight / 2;
+      const stepCenterX = targetStep.offsetLeft + targetStep.offsetWidth / 2;
+      const stepCenterY = targetStep.offsetTop + targetStep.offsetHeight / 2;
 
       // Calculate target pan to center the step in the viewport
       const targetX = (viewport.clientWidth / 2) - (stepCenterX * scale);
@@ -1732,7 +1761,13 @@ body {
       this.zoomPanController.pan(targetX, targetY, { animate: false });
 
       // Add highlight to starting step
-      startStep.classList.add('journey-step-current');
+      targetStep.classList.add('journey-step-current');
+    }
+
+    _getUrlFragment() {
+      // Get URL fragment without the # prefix
+      const hash = window.location.hash;
+      return hash ? hash.substring(1) : '';
     }
 
     // Public API methods
@@ -1892,7 +1927,18 @@ body {
         await new Promise(resolve => setTimeout(resolve, 0));
         this._navigateToStart();
 
-        this.currentStep = this._findStartStep().id;
+        // Set currentStep based on URL fragment or start step
+        const urlFragment = this._getUrlFragment();
+        if (urlFragment) {
+          const fragmentStep = document.getElementById(urlFragment);
+          if (fragmentStep && this.steps.includes(fragmentStep)) {
+            this.currentStep = fragmentStep.id;
+          } else {
+            this.currentStep = this._findStartStep().id;
+          }
+        } else {
+          this.currentStep = this._findStartStep().id;
+        }
 
         console.timeEnd('journey-init');
         this._emit('layout-complete');

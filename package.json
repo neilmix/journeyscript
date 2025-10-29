@@ -10,7 +10,8 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "rollup -c",
+    "build": "rollup -c && npm run build:examples",
+    "build:examples": "node tools/journey-build.js examples/simple.md && node tools/journey-build.js examples/complex.md && node tools/journey-build.js examples/big.md",
     "dev": "vite",
     "journeyscript": "node tools/journey-build.js"
   },
