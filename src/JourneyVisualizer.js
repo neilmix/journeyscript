@@ -20,9 +20,11 @@ export class JourneyVisualizer {
     const defaults = {
       layout: {
         direction: 'TB',
-        rankSep: 100,
-        nodeSep: 80,
-        edgeSep: 30
+        rankSep: 120,
+        nodeSep: 150,
+        edgeSep: 50,
+        align: 'DL',
+        ranker: 'tight-tree'
       },
       zoom: {
         initial: 1,
@@ -83,7 +85,9 @@ export class JourneyVisualizer {
       rankdir: this.options.layout.direction,
       ranksep: this.options.layout.rankSep,
       nodesep: this.options.layout.nodeSep,
-      edgesep: this.options.layout.edgeSep
+      edgesep: this.options.layout.edgeSep,
+      align: this.options.layout.align,
+      ranker: this.options.layout.ranker
     });
 
     // Set position:absolute on steps BEFORE measuring to get accurate dimensions

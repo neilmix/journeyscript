@@ -1,0 +1,238 @@
+================================================================================
+                    DAGRE WORKFLOW DIAGRAM
+================================================================================
+
+INITIALIZATION FLOW:
+════════════════════════════════════════════════════════════════════════════
+
+                    visualizer.init()
+                          │
+                          ▼
+              ┌───────────────────────────┐
+              │  _discoverSteps()         │
+              │ Find all .step elements   │
+              └───────────────┬───────────┘
+                              │
+                              ▼
+              ┌───────────────────────────┐
+              │  _buildGraph()            │
+              │                           │
+              │  ┌─────────────────────┐  │
+              │  │ new Graph()         │  │
+              │  │ setGraph()          │  │  ← DAGRE SETUP
+              │  │ setNode() × n       │  │
+              │  │ setEdge() × m       │  │
+              │  └─────────────────────┘  │
+              └───────────────┬───────────┘
+                              │
+                              ▼
+              ┌───────────────────────────┐
+              │  _computeLayout()         │
+              │                           │
+              │  ┌─────────────────────┐  │
+              │  │ dagre.layout()      │  │  ← CORE DAGRE CALL
+              │  │ Populates:          │  │
+              │  │  node.x, node.y     │  │
+              │  │  edge.points        │  │
+              │  └─────────────────────┘  │
+              └───────────────┬───────────┘
+                              │
+                              ▼
+              ┌───────────────────────────┐
+              │  _positionSteps()         │
+              │                           │
+              │  ┌─────────────────────┐  │
+              │  │ Convert CENTER→TOP-L│  │  ← COORDINATE TRANSFORMATION
+              │  │ Find bounds         │  │
+              │  │ Apply padding       │  │
+              │  │ Set left/top styles │  │
+              │  └─────────────────────┘  │
+              └───────────────┬───────────┘
+                              │
+                              ▼
+              ┌───────────────────────────┐
+              │  _createSvgOverlay()      │
+              │  Create SVG container     │
+              └───────────────┬───────────┘
+                              │
+                              ▼
+              ┌───────────────────────────┐
+              │  _drawArrows()            │
+              │                           │
+              │  ┌─────────────────────┐  │
+              │  │ For each edge:      │  │
+              │  │  Get edge.points    │  │  ← USE DAGRE RESULTS
+              │  │  Draw SVG path      │  │
+              │  │  Add label          │  │
+              │  └─────────────────────┘  │
+              └───────────────┬───────────┘
+                              │
+                              ▼
+              ┌───────────────────────────┐
+              │ VISUALIZATION READY       │
+              └───────────────────────────┘
+
+
+DATA FLOW IN _buildGraph():
+════════════════════════════════════════════════════════════════════════════
+
+HTML DOM                    → DAGRE GRAPH
+═════════════════════════════════════════════════════════════════════════
+
+<div class="step" id="s1">     →  graph.setNode('s1', {
+  <h2>Step 1</h2>                 width: 200,
+  <button data-dest="s2">Next      height: 100,
+</div>                            element: <div>
+                                })
+
+<div class="step" id="s2">     →  graph.setNode('s2', {
+  <h2>Step 2</h2>                 width: 200,
+</div>                            height: 100,
+                                element: <div>
+                                })
+
+<button data-dest="s2">        →  graph.setEdge('s1', 's2', {
+                                  label: 'Next',
+                                  sourceElement: <button>
+                                })
+
+
+DAGRE LAYOUT COMPUTATION:
+════════════════════════════════════════════════════════════════════════════
+
+INPUT:                          PROCESSING:           OUTPUT:
+┌──────────────────────┐        ┌──────────────┐      ┌──────────────────────┐
+│ Nodes with:          │        │              │      │ For each node:       │
+│ - id                 │        │ Hierarchical │      │ - node.x (center)    │
+│ - width, height      │───────▶│ Layout       │─────▶│ - node.y (center)    │
+│                      │        │ Algorithm    │      │                      │
+│ Edges with:          │        │              │      │ For each edge:       │
+│ - source, dest       │        │              │      │ - edge.points[]      │
+│ - label              │        │              │      │   (routing path)     │
+│                      │        │              │      │ - edge.label         │
+│ Configuration:       │        │              │      │                      │
+│ - rankdir: 'TB'      │        │              │      │ Example point:       │
+│ - ranksep: 100       │        │              │      │ {x: 150, y: 200}     │
+│ - nodeSep: 80        │        │              │      └──────────────────────┘
+└──────────────────────┘        └──────────────┘
+
+
+COORDINATE SYSTEM:
+════════════════════════════════════════════════════════════════════════════
+
+DAGRE OUTPUT (CENTER-BASED)    →    CSS NEEDS (TOP-LEFT)
+═══════════════════════════════════════════════════════
+
+      (x, y)
+        •━━━━━━━━ width ━━━━━━━━┐     x - width/2, y - height/2
+        ┃                        ┃                ┃
+        ┃    NODE                ┃                ▼
+      height                     ┃     •━━━━━━━━ width ━━━━━━━━┐
+        ┃                        ┃     ┃                        ┃
+        ┃                        ┃     ┃    NODE                ┃
+        └────────────────────────┘   height                     ┃
+                                      ┃                        ┃
+Center-based coordinate system        └────────────────────────┘
+(origin at node center)            Top-left-based coordinate system
+                                  (origin at node top-left corner)
+
+TRANSFORMATION:
+  left = x - width / 2
+  top  = y - height / 2
+
+
+EDGE RENDERING:
+════════════════════════════════════════════════════════════════════════════
+
+DAGRE EDGE POINTS                SVG PATH RENDERING
+═════════════════════════════════════════════════════
+
+edge.points = [                  <path d="M 100,50 L 150,75
+  {x: 100, y: 50},      ────────        L 175,150 L 200,200"
+  {x: 150, y: 75},              stroke="#333"
+  {x: 175, y: 150},             marker-end="url(#arrowhead)"/>
+  {x: 200, y: 200}              
+]
+
+Plus optional label at midpoint:
+
+  midpoint = edge.points[length/2]  →  <text x="140" y="110">
+                                         Next
+                                        </text>
+
+
+PAN/ZOOM AFTER LAYOUT:
+════════════════════════════════════════════════════════════════════════════
+
+POSITIONED ELEMENTS              AFTER ZOOM/PAN
+(from dagre)                     (CSS transforms)
+═════════════════════════════════════════════════
+
+┌────────┐                       ┌─────────┐
+│  Step  │                       │ Step    │  ← zoomed/panned
+│ (left, │   ZoomPanController   │(transform)
+│  top)  │   CSS transforms       │         │
+└────────┘                       └─────────┘
+
+Note: No re-layout occurs!
+      Only CSS transforms applied
+
+
+WORKFLOW STATE DIAGRAM:
+════════════════════════════════════════════════════════════════════════════
+
+INITIAL STATE         AFTER GRAPH BUILD       AFTER LAYOUT
+╔════════════════╗    ╔════════════════╗    ╔════════════════╗
+║ Empty graph    ║    ║ Graph with     ║    ║ Graph with     ║
+║ object created ║    ║ nodes & edges  ║    ║ x,y & points   ║
+║                ║───▶║                ║───▶║                ║
+║ No positions   ║    ║ No positions   ║    ║ Positions!     ║
+║ yet            ║    ║ yet            ║    ║                ║
+╚════════════════╝    ╚════════════════╝    ╚════════════════╝
+                                                     │
+                                                     ▼
+                                             ╔════════════════╗
+                                             ║ DOM positioned ║
+                                             ║ (left/top      ║
+                                             ║  applied)      ║
+                                             ║                ║
+                                             ║ SVG drawn      ║
+                                             ║ (arrows)       ║
+                                             ║                ║
+                                             ║ VISUALIZATION ║
+                                             ║ COMPLETE       ║
+                                             ╚════════════════╝
+
+
+CONFIGURATION CASCADE:
+════════════════════════════════════════════════════════════════════════════
+
+User Options         →    Merged Defaults    →    Dagre setGraph()
+┌─────────────────┐      ┌─────────────────┐     ┌─────────────────┐
+│ {               │      │ {               │     │ setGraph({      │
+│   direction:LR  │─────▶│   direction:LR  │────▶│   rankdir:LR    │
+│ }               │      │   rankSep:100   │     │   ranksep:100   │
+│                 │      │   nodeSep:80    │     │   nodesep:80    │
+│ (user override) │      │   edgeSep:30    │     │   edgesep:30    │
+└─────────────────┘      │ }               │     │ })              │
+                         │ (defaults       │     └─────────────────┘
+                         │  applied)       │
+                         └─────────────────┘
+
+
+KEY INSIGHT: THE CORE DAGRE CALL
+════════════════════════════════════════════════════════════════════════════
+
+Before:                  The Call:            After:
+┌──────────────┐         ┌────────┐          ┌──────────────────┐
+│ graph with   │         │        │          │ graph with       │
+│ only nodes & │────────▶│ dagre  │─────────▶│ nodes positioned │
+│ edges        │         │.layout │          │ and edges        │
+│              │         │ (graph)│          │ routed           │
+│ No positions │         │        │          │                  │
+└──────────────┘         └────────┘          │ Ready to render! │
+                                              └──────────────────┘
+
+That's it! Everything else in the project is setup before or rendering after.
+
+================================================================================
