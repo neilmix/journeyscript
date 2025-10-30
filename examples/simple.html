@@ -603,6 +603,9 @@ body {
       const offsetX = -this.bounds.minX + this.bounds.padding;
       const offsetY = -this.bounds.minY + this.bounds.padding;
 
+      // First pass: draw all arrow paths and collect label data
+      const labelData = [];
+
       this.graph.edges().forEach(edgeObj => {
         const edge = this.graph.edge(edgeObj);
 
@@ -626,11 +629,28 @@ body {
 
         this.svgOverlay.appendChild(path);
 
-        // Add label at midpoint if enabled
+        // Collect label data for collision detection
         if (this.options.arrows.showLabels && edge.label) {
-          const midpoint = edge.points[Math.floor(edge.points.length / 2)];
-          const midX = midpoint.x + offsetX;
-          const midY = midpoint.y + offsetY;
+          const bbox = { width: edge.label.length * 7, height: 16 };
+          labelData.push({
+            edge: edge,
+            edgePoints: edge.points,
+            label: edge.label,
+            bbox: bbox,
+            position: 0.5  // Start at midpoint (50%)
+          });
+        }
+      });
+
+      // Second pass: detect collisions and adjust label positions
+      if (labelData.length > 0) {
+        this._adjustLabelPositions(labelData);
+
+        // Third pass: render labels at adjusted positions
+        labelData.forEach(data => {
+          const point = this._getPointAlongEdge(data.edgePoints, data.position);
+          const midX = point.x + offsetX;
+          const midY = point.y + offsetY;
 
           const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           text.setAttribute('x', midX);
@@ -641,15 +661,14 @@ body {
           text.setAttribute('fill', this.options.arrows.color);
           text.setAttribute('font-size', '12px');
           text.setAttribute('font-family', 'system-ui, sans-serif');
-          text.textContent = edge.label;
+          text.textContent = data.label;
 
           // Add white background for readability
           const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          const bbox = text.getBBox ? { width: edge.label.length * 7, height: 16 } : { width: 50, height: 16 };
-          bgRect.setAttribute('x', midX - bbox.width / 2 - 4);
-          bgRect.setAttribute('y', midY - bbox.height / 2 - 2);
-          bgRect.setAttribute('width', bbox.width + 8);
-          bgRect.setAttribute('height', bbox.height + 4);
+          bgRect.setAttribute('x', midX - data.bbox.width / 2 - 4);
+          bgRect.setAttribute('y', midY - data.bbox.height / 2 - 2);
+          bgRect.setAttribute('width', data.bbox.width + 8);
+          bgRect.setAttribute('height', data.bbox.height + 4);
           bgRect.setAttribute('fill', 'white');
           bgRect.setAttribute('stroke', '#ccc');
           bgRect.setAttribute('stroke-width', '1');
@@ -657,8 +676,111 @@ body {
 
           this.svgOverlay.appendChild(bgRect);
           this.svgOverlay.appendChild(text);
+        });
+      }
+    }
+
+    _getPointAlongEdge(points, position) {
+      // Get a point along the edge path at the given position (0.0 to 1.0)
+      // position 0.0 = start, 0.5 = midpoint, 1.0 = end
+
+      if (points.length === 0) return { x: 0, y: 0 };
+      if (points.length === 1) return points[0];
+
+      // Calculate total path length
+      let totalLength = 0;
+      const segments = [];
+      for (let i = 0; i < points.length - 1; i++) {
+        const dx = points[i + 1].x - points[i].x;
+        const dy = points[i + 1].y - points[i].y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        segments.push({ start: points[i], end: points[i + 1], length: length });
+        totalLength += length;
+      }
+
+      // Find the segment that contains our target position
+      const targetLength = totalLength * position;
+      let currentLength = 0;
+
+      for (const segment of segments) {
+        if (currentLength + segment.length >= targetLength) {
+          // This segment contains our target point
+          const segmentPosition = (targetLength - currentLength) / segment.length;
+          return {
+            x: segment.start.x + (segment.end.x - segment.start.x) * segmentPosition,
+            y: segment.start.y + (segment.end.y - segment.start.y) * segmentPosition
+          };
         }
-      });
+        currentLength += segment.length;
+      }
+
+      // Fallback: return the last point
+      return points[points.length - 1];
+    }
+
+    _adjustLabelPositions(labelData) {
+      // Detect collisions and adjust label positions along their edge paths
+      const maxIterations = 5;
+      const adjustmentStep = 0.05;  // Move 5% along the edge path per iteration
+
+      for (let iteration = 0; iteration < maxIterations; iteration++) {
+        let hadCollision = false;
+
+        // Check all pairs for collisions
+        for (let i = 0; i < labelData.length; i++) {
+          for (let j = i + 1; j < labelData.length; j++) {
+            const label1 = labelData[i];
+            const label2 = labelData[j];
+
+            // Get current positions with offsets
+            const offsetX = -this.bounds.minX + this.bounds.padding;
+            const offsetY = -this.bounds.minY + this.bounds.padding;
+
+            const point1 = this._getPointAlongEdge(label1.edgePoints, label1.position);
+            const point2 = this._getPointAlongEdge(label2.edgePoints, label2.position);
+
+            const x1 = point1.x + offsetX;
+            const y1 = point1.y + offsetY;
+            const x2 = point2.x + offsetX;
+            const y2 = point2.y + offsetY;
+
+            // Check for rectangle overlap (with padding)
+            const padding = 4;
+            const rect1 = {
+              left: x1 - label1.bbox.width / 2 - padding,
+              right: x1 + label1.bbox.width / 2 + padding,
+              top: y1 - label1.bbox.height / 2 - padding,
+              bottom: y1 + label1.bbox.height / 2 + padding
+            };
+
+            const rect2 = {
+              left: x2 - label2.bbox.width / 2 - padding,
+              right: x2 + label2.bbox.width / 2 + padding,
+              top: y2 - label2.bbox.height / 2 - padding,
+              bottom: y2 + label2.bbox.height / 2 + padding
+            };
+
+            if (this._rectanglesOverlap(rect1, rect2)) {
+              hadCollision = true;
+
+              // Move labels toward their source (decrease position value)
+              // Keep positions between 0.2 and 0.8 to stay on the edge
+              label1.position = Math.max(0.2, label1.position - adjustmentStep);
+              label2.position = Math.min(0.8, label2.position + adjustmentStep);
+            }
+          }
+        }
+
+        // If no collisions detected, we're done
+        if (!hadCollision) break;
+      }
+    }
+
+    _rectanglesOverlap(rect1, rect2) {
+      return rect1.left < rect2.right &&
+             rect1.right > rect2.left &&
+             rect1.top < rect2.bottom &&
+             rect1.bottom > rect2.top;
     }
 
     _initializePanZoom() {
