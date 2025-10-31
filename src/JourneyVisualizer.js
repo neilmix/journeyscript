@@ -30,7 +30,7 @@ export class JourneyVisualizer {
         initial: 1,
         min: 0.1,
         max: 3,
-        step: 0.1
+        step: 0.03
       },
       arrows: {
         showLabels: true,
