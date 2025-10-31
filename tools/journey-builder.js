@@ -124,6 +124,11 @@ export function renderStepContent(markdown, stepNames) {
       return match; // Keep as regular link
     }
 
+    // Special case: #back for browser history navigation
+    if (href === '#back' || href === 'back') {
+      return `<button data-dest="back">${text}</button>`;
+    }
+
     // href should now be a step ID (already slugified)
     // Check if it's one of our step IDs
     const stepIds = Array.from(stepNames.values());

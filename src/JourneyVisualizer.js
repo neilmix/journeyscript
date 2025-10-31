@@ -116,6 +116,11 @@ export class JourneyVisualizer {
         const destId = action.getAttribute('data-dest');
         const label = action.textContent.trim();
 
+        // Skip special 'back' navigation - it shouldn't create edges
+        if (destId === 'back' || destId === '#back') {
+          return;
+        }
+
         // Validate destination exists
         if (!validStepIds.has(destId)) {
           console.warn(`Invalid destination: ${step.id} -> ${destId}`);
@@ -504,6 +509,12 @@ export class JourneyVisualizer {
 
   // Public API methods
   navigateTo(stepId, options = {}) {
+    // Handle special #back navigation
+    if (stepId === 'back' || stepId === '#back') {
+      window.history.back();
+      return;
+    }
+
     const step = document.getElementById(stepId);
 
     if (!step) {
@@ -567,10 +578,14 @@ export class JourneyVisualizer {
     }
 
     // Update URL fragment
-    if (window.history && window.history.replaceState) {
-      window.history.replaceState(null, '', `#${stepId}`);
-    } else {
-      window.location.hash = stepId;
+    // Use pushState (not replaceState) to build browser history for back/forward buttons
+    // Skip history update if this navigation is from a popstate event
+    if (!options.skipHistoryUpdate) {
+      if (window.history && window.history.pushState) {
+        window.history.pushState(null, '', `#${stepId}`);
+      } else {
+        window.location.hash = stepId;
+      }
     }
 
     // Emit navigate event
@@ -679,6 +694,9 @@ export class JourneyVisualizer {
         this.currentStep = this._findStartStep().id;
       }
 
+      // Set up popstate listener for browser back/forward buttons
+      this._setupHistoryListener();
+
       console.timeEnd('journey-init');
       this._emit('layout-complete');
 
@@ -707,6 +725,23 @@ export class JourneyVisualizer {
         }))
       );
     }
+  }
+
+  _setupHistoryListener() {
+    // Listen for browser back/forward button clicks
+    window.addEventListener('popstate', () => {
+      const fragment = this._getUrlFragment();
+      if (fragment) {
+        // Navigate to the step from URL fragment, skipping history update
+        this.navigateTo(fragment, { animate: true, skipHistoryUpdate: true });
+      } else {
+        // No fragment means we're at the start - navigate to start step
+        const startStep = this._findStartStep();
+        if (startStep) {
+          this.navigateTo(startStep.id, { animate: true, skipHistoryUpdate: true });
+        }
+      }
+    });
   }
 
   _setupButtonHandlers() {

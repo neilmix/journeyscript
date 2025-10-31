@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Back Navigation Test</title>
+  <link rel="stylesheet" href="../dist/journey-visualizer.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    #journey-viewport {
+      width: 100%;
+      height: 600px;
+      border: 2px solid #ddd;
+      position: relative;
+      overflow: hidden;
+    }
+    .journey-step {
+      background: white;
+      border: 2px solid #333;
+      border-radius: 8px;
+      padding: 20px;
+      min-width: 200px;
+    }
+    .journey-step h2 {
+      margin: 0 0 10px 0;
+      font-size: 18px;
+    }
+    button {
+      margin: 5px 5px 5px 0;
+      padding: 8px 16px;
+      border: 1px solid #333;
+      border-radius: 4px;
+      background: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #f0f0f0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Back Navigation Test</h1>
+  <p>This test verifies that #back navigation works using browser history.</p>
+
+  <div id="journey-viewport">
+    <div id="journey-container">
+
+      <div class="journey-step" id="step-1" data-start>
+        <h2>Step 1: Start</h2>
+        <p>Welcome! Click to navigate forward.</p>
+        <button data-dest="step-2">Go to Step 2</button>
+      </div>
+
+      <div class="journey-step" id="step-2">
+        <h2>Step 2: Middle</h2>
+        <p>You're at step 2. You can go forward or back.</p>
+        <button data-dest="step-3">Go to Step 3</button>
+        <button data-dest="back">← Back</button>
+      </div>
+
+      <div class="journey-step" id="step-3">
+        <h2>Step 3: End</h2>
+        <p>You're at the end. Use back to return.</p>
+        <button data-dest="back">← Back</button>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="../dist/journey-visualizer.umd.js"></script>
+  <script>
+    const visualizer = new JourneyVisualizer.JourneyVisualizer('#journey-container', {
+      layout: {
+        algorithm: 'dagre',
+        direction: 'LR',
+        nodeSpacing: 100,
+        rankSpacing: 150
+      },
+      navigation: {
+        highlightOnNavigate: true
+      }
+    });
+
+    visualizer.init();
+
+    // Expose for testing
+    window.visualizer = visualizer;
+  </script>
+</body>
+</html>
