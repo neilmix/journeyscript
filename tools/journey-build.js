@@ -8,25 +8,89 @@ import { parseMarkdown, generateHTML } from './journey-builder.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Parse command line arguments
+function parseArgs(args) {
+  const result = {
+    inputPath: null,
+    outputPath: null,
+    useStdin: false
+  };
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '-o' || args[i] === '--output') {
+      if (i + 1 >= args.length) {
+        console.error('Error: -o flag requires an output file path');
+        process.exit(1);
+      }
+      result.outputPath = path.resolve(args[i + 1]);
+      i++; // Skip next arg since we consumed it
+    } else if (!result.inputPath) {
+      result.inputPath = path.resolve(args[i]);
+    } else {
+      console.error(`Error: Unexpected argument: ${args[i]}`);
+      process.exit(1);
+    }
+  }
+
+  // If no input path specified, use stdin
+  if (!result.inputPath) {
+    result.useStdin = true;
+  }
+
+  return result;
+}
+
+// Read from stdin
+async function readStdin() {
+  return new Promise((resolve, reject) => {
+    let data = '';
+
+    process.stdin.setEncoding('utf-8');
+
+    process.stdin.on('data', chunk => {
+      data += chunk;
+    });
+
+    process.stdin.on('end', () => {
+      resolve(data);
+    });
+
+    process.stdin.on('error', err => {
+      reject(err);
+    });
+  });
+}
+
 // Main function
-function main() {
+async function main() {
   const args = process.argv.slice(2);
 
-  if (args.length === 0) {
-    console.error('Usage: journey-build <input.md>');
-    console.error('Creates <input.html> in the same directory');
-    process.exit(1);
+  // Parse arguments
+  const config = parseArgs(args);
+
+  let markdown;
+  let inputPath = config.inputPath;
+
+  if (config.useStdin) {
+    // Read from stdin
+    try {
+      markdown = await readStdin();
+      if (!markdown.trim()) {
+        console.error('Error: No input provided via stdin');
+        process.exit(1);
+      }
+    } catch (err) {
+      console.error(`Error reading from stdin: ${err.message}`);
+      process.exit(1);
+    }
+  } else {
+    // Read from file
+    if (!fs.existsSync(inputPath)) {
+      console.error(`Error: File not found: ${inputPath}`);
+      process.exit(1);
+    }
+    markdown = fs.readFileSync(inputPath, 'utf-8');
   }
-
-  const inputPath = path.resolve(args[0]);
-
-  if (!fs.existsSync(inputPath)) {
-    console.error(`Error: File not found: ${inputPath}`);
-    process.exit(1);
-  }
-
-  // Read input markdown
-  const markdown = fs.readFileSync(inputPath, 'utf-8');
 
   // Parse markdown
   const { steps, stepNames, htmlTitle, preamble } = parseMarkdown(markdown);
@@ -60,11 +124,27 @@ function main() {
   // Generate HTML
   const html = generateHTML(steps, stepNames, htmlTitle, cssContent, jsContent, preamble);
 
-  // Write output
-  const outputPath = inputPath.replace(/\.md$/, '.html');
+  // Determine output path
+  let outputPath = config.outputPath;
+
+  if (!outputPath) {
+    if (config.useStdin) {
+      // If reading from stdin and no output specified, write to stdout
+      process.stdout.write(html);
+      return;
+    } else {
+      // Default: replace .md with .html
+      outputPath = inputPath.replace(/\.md$/, '.html');
+    }
+  }
+
+  // Write output to file
   fs.writeFileSync(outputPath, html, 'utf-8');
 
   console.log(`✓ Generated: ${outputPath}`);
 }
 
-main();
+main().catch(err => {
+  console.error(`Error: ${err.message}`);
+  process.exit(1);
+});

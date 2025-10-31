@@ -104,12 +104,45 @@ npm run dev  # View examples at http://localhost:8000/examples/
 
 ## Command Line Usage
 
+### Basic Usage
+
+```bash
+# Convert markdown file to HTML
+npm run journeyscript myflow.md
+# Creates myflow.html in the same directory
+
+# Specify custom output file
+npm run journeyscript myflow.md -o custom-name.html
+npm run journeyscript myflow.md --output custom-name.html
+
+# Read from stdin and write to file
+cat myflow.md | npm run journeyscript -- -o output.html
+echo "## Step 1..." | npm run journeyscript -- -o journey.html
+
+# Read from stdin and write to stdout (for piping)
+cat myflow.md | npm run journeyscript > output.html
+cat myflow.md | npm run journeyscript | less
+```
+
+**Note:** When using npm scripts, use `--` before flags to pass them through to the underlying command.
+
+### Direct CLI Usage
+
+If installed globally or via npx:
+
 ```bash
 # Basic usage
-npm run journeyscript myflow.md
+journeyscript myflow.md
 
-# Creates myflow.html in the same directory
+# Custom output
+journeyscript myflow.md -o output.html
+
+# From stdin
+cat myflow.md | journeyscript -o output.html
+cat myflow.md | journeyscript > output.html
 ```
+
+### Output Format
 
 The generated HTML file is self-contained with:
 - Inlined styles and JavaScript
