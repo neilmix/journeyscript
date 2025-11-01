@@ -36,6 +36,8 @@ npm run journeyscript simple.md
 
 Open `simple.html` in your browser to see your flow diagram come to life!
 
+[View examples here](https://neilmix.github.io/journeyscript/examples/)
+
 ## Installation
 
 ```bash
@@ -88,19 +90,6 @@ This is **bold** and this is *italic*.
 ```
 
 Supports: **bold**, *italic*, `code`, lists, images, code blocks, and HTML.
-
-## Examples
-
-- **[simple.md](examples/simple.md)** - A minimal 3-step flow
-- **[complex.md](examples/complex.md)** - E-commerce checkout with 13 steps, multiple paths and loops
-- **[big.md](examples/big.md)** - Performance test with 150 steps
-
-Try them:
-
-```bash
-npm run journeyscript examples/simple.md
-npm run dev  # View examples at http://localhost:8000/examples/
-```
 
 ## Command Line Usage
 
