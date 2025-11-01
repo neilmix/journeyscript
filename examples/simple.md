@@ -8,7 +8,7 @@ This is the starting point of your journey.
 
 You're making **progress**!
 
-[Continue](Complete) [← Back](#back)
+[Continue](Complete) [Go Back](Welcome)
 
 ## Complete
 
