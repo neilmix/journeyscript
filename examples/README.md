@@ -1,28 +1,22 @@
 # Examples
 
-## Markdown Examples (Start Here!)
+## Simple
 
-These are the source files you write to create flow diagrams:
+A minimal 3-step flow
 
-- **[simple.md](simple.md)** - A minimal 3-step flow
-- **[complex.md](complex.md)** - E-commerce checkout flow with 13 steps
-- **[big.md](big.md)** - Performance test with 150 steps
+- [markdown](simple.md)
+- [diagram](simple.html)
 
-**Try it:**
-```bash
-npm run journeyscript examples/simple.md
-```
+## Complex
 
-## Generated HTML Examples
+E-commerce checkout flow with 13 steps
 
-The `.html` files are what JourneyScript builds from the `.md` files. View them to see the interactive diagrams:
+- [markdown](complex.md)
+- [diagram](complex.html)
 
-```bash
-npm run dev
-```
+## Big
 
-Then open http://localhost:8000/examples/ and click on any `.html` file.
+Performance test with 150 steps
 
-## Styling
-
-All examples share `styles.css` for basic step styling. Customize this for your own projects.
+- [markdown](big.md)
+- [diagram](big.html)
