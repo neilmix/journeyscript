@@ -1,0 +1,68 @@
+# Development and testing files
+.scratch/
+.worktrees/
+tests/
+examples/
+*.test.js
+vitest.config.js
+vite.config.js
+rollup.config.js
+
+# Documentation not needed in package
+CLAUDE.md
+IMPLEMENTATION_SUMMARY.md
+DAGRE_ANALYSIS_INDEX.md
+docs/
+
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory
+coverage
+*.lcov
+.nyc_output
+
+# Dependency directories
+node_modules/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# dotenv environment variable files
+.env
+.env.*
+
+# Build artifacts we don't want
+*.tgz

@@ -25,7 +25,7 @@ describe('Pan/Zoom', () => {
     expect(visualizer.zoomPanController.getScale()).toBe(1);
     expect(visualizer.zoomPanController.minScale).toBe(0.1);
     expect(visualizer.zoomPanController.maxScale).toBe(3);
-    expect(visualizer.zoomPanController.zoomStep).toBe(0.1);
+    expect(visualizer.zoomPanController.zoomStep).toBe(0.03);
   });
 
   it('should store zoom/pan controller instance', () => {
