@@ -483,11 +483,11 @@ export class JourneyVisualizer {
 
     // Use offset positions (untransformed coordinates)
     const stepCenterX = targetStep.offsetLeft + targetStep.offsetWidth / 2;
-    const stepCenterY = targetStep.offsetTop + targetStep.offsetHeight / 2;
+    const stepTopY = targetStep.offsetTop;
 
-    // Calculate target pan to center the step in the viewport
+    // Calculate target pan to center horizontally and position 20px from top vertically
     const targetX = (viewport.clientWidth / 2) - (stepCenterX * scale);
-    const targetY = (viewport.clientHeight / 2) - (stepCenterY * scale);
+    const targetY = 20 - (stepTopY * scale);
 
     // Apply pan
     this.zoomPanController.pan(targetX, targetY, { animate: false });
@@ -532,11 +532,11 @@ export class JourneyVisualizer {
 
     // Use offset positions (untransformed coordinates)
     const stepCenterX = step.offsetLeft + step.offsetWidth / 2;
-    const stepCenterY = step.offsetTop + step.offsetHeight / 2;
+    const stepTopY = step.offsetTop;
 
-    // Calculate target pan to center the step in the viewport
+    // Calculate target pan to center horizontally and position 20px from top vertically
     const targetX = (viewport.clientWidth / 2) - (stepCenterX * scale);
-    const targetY = (viewport.clientHeight / 2) - (stepCenterY * scale);
+    const targetY = 20 - (stepTopY * scale);
 
     // Apply animation if requested
     const animate = options.animate !== undefined ? options.animate : true;
