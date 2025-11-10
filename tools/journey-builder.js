@@ -90,7 +90,7 @@ export function parseMarkdown(markdown) {
 
 // Convert markdown content to HTML with smart link detection
 export function renderStepContent(markdown, stepNames) {
-  const md = new MarkdownIt({ html: true });
+  const md = new MarkdownIt({ html: true, breaks: true });
 
   // Pre-process: Replace markdown links with step names
   // Find all markdown links [text](target)

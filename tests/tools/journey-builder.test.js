@@ -349,6 +349,50 @@ More text.`;
     expect(html).toContain('<button data-dest="step-2">Continue</button>');
     expect(html).toContain('More text');
   });
+
+  it('should insert line breaks at newlines without requiring double-spaces', () => {
+    const stepNames = new Map();
+    const markdown = `Line one
+Line two
+Line three`;
+
+    const html = renderStepContent(markdown, stepNames);
+
+    // Should contain <br> tags between lines
+    expect(html).toContain('<br>');
+    expect(html).toContain('Line one');
+    expect(html).toContain('Line two');
+    expect(html).toContain('Line three');
+  });
+
+  it('should handle line breaks in text with formatting', () => {
+    const stepNames = new Map();
+    const markdown = `This is **bold text**
+And this is *italic*
+Normal text here`;
+
+    const html = renderStepContent(markdown, stepNames);
+
+    expect(html).toContain('<strong>bold text</strong>');
+    expect(html).toContain('<em>italic</em>');
+    expect(html).toContain('<br>');
+  });
+
+  it('should preserve paragraph breaks with double newlines', () => {
+    const stepNames = new Map();
+    const markdown = `Paragraph one
+
+Paragraph two
+
+Paragraph three`;
+
+    const html = renderStepContent(markdown, stepNames);
+
+    // Double newlines should create paragraph tags
+    expect(html).toContain('<p>Paragraph one</p>');
+    expect(html).toContain('<p>Paragraph two</p>');
+    expect(html).toContain('<p>Paragraph three</p>');
+  });
 });
 
 describe('generateHTML', () => {

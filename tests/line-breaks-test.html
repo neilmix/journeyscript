@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Line Break Test - Journey Visualizer</title>
+  <style>
+/* examples/styles.css */
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.journey-viewport {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+  background: #f5f5f5;
+}
+
+.journey-container {
+  position: relative;
+}
+
+.step {
+  background: white;
+  border: 2px solid #333;
+  border-radius: 8px;
+  padding: 20px;
+  min-width: 200px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.step h2 {
+  margin: 0 0 10px 0;
+  font-size: 18px;
+}
+
+.step p {
+  margin: 0 0 15px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.step button {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: 8px;
+  font-size: 14px;
+}
+
+.step button:hover {
+  background: #0056b3;
+}
+
+.step button:disabled {
+  background: #cccccc;
+  cursor: not-allowed;
+}
+
+.journey-step-highlight {
+  animation: highlight 1s ease-in-out;
+}
+
+@keyframes highlight {
+  0%, 100% { background: white; }
+  50% { background: #fffacd; }
+}
+
+.journey-step-current {
+  border-color: #007bff !important;
+  border-width: 3px !important;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.3), 0 2px 8px rgba(0,0,0,0.1);
+}
+
+  </style>
+</head>
+<body>
+  <div class="journey-viewport">
+    <div class="journey-container">
+      <div class="step" id="line-break-test" data-place="start">
+        <h2>Line Break Test</h2>
+        <p>This is the first line<br>
+        This is the second line<br>
+        This is the third line</p>
+        <p>All three lines above should appear on separate lines without needing double-spaces at the end.</p>
+        <p><button data-dest="paragraph-test">Continue</button></p>
+        
+      </div>
+
+      <div class="step" id="paragraph-test">
+        <h2>Paragraph Test</h2>
+        <p>Paragraph breaks with double newlines should still work correctly.</p>
+        <p>This is a separate paragraph. It should have space above and below it.</p>
+        <p>Single line breaks work like this:<br>
+        Line A<br>
+        Line B<br>
+        Line C</p>
+        <p><button data-dest="formatting-test">Next</button></p>
+        
+      </div>
+
+      <div class="step" id="formatting-test">
+        <h2>Formatting Test</h2>
+        <p><strong>Bold text on first line</strong><br>
+        <em>Italic text on second line</em><br>
+        Normal text on third line</p>
+        <p>These should all be on separate lines with proper formatting.</p>
+        <p>You can also have longer text that wraps naturally within a line, but when you include an actual newline in your markdown source<br>
+        it should create a line break in the output<br>
+        rather than treating it as a space<br>
+        like traditional markdown would do.</p>
+        <p><button data-dest="line-break-test">Back to Start</button> <button data-dest="complete">Done</button></p>
+        
+      </div>
+
+      <div class="step" id="complete">
+        <h2>Complete</h2>
+        <p>You've tested the line break behavior!</p>
+        <p>All tests should show:</p>
+        <ul>
+        <li>Single newlines create <code>&lt;br&gt;</code> tags</li>
+        <li>Double newlines create paragraph breaks</li>
+        <li>Formatting is preserved across line breaks</li>
+        </ul>
+        <p><button data-dest="line-break-test">Restart</button></p>
+        
+      </div>
+    </div>
+  </div>
+
+  <!-- Load dependencies from CDN -->
+  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://unpkg.com/@panzoom/panzoom@4.5.1/dist/panzoom.min.js"></script>
+
+  <!-- Inlined journey visualizer -->
+  <script>
+(function (global, factory) {
+  typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports, require('dagre')) :
+  typeof define === 'function' && define.amd ? define(['exports', 'dagre'], factory) :
+  (global = typeof globalThis !== 'undefined' ? globalThis : global || self, factory(global.JourneyVisualizer = {}, global.dagre));
+})(this, (function (exports, dagre) { 'use strict';
+
+  // src/ZoomPanController.js
+
+  /**
+   * ZoomPanController: Clean, custom zoom and pan implementation
+   *
+   * Handles:
+   * - Wheel-based zooming with focal point
+   * - Drag panning with pointer events
+   * - Programmatic zoom/pan API
+   *
+   * Does NOT handle:
+   * - Pinch zoom (not needed for this project)
+   * - Containment (we need free positioning)
+   */
+  class ZoomPanController {
+    constructor(element, viewport, options = {}) {
+      this.element = element;
+      this.viewport = viewport;
+
+      // Options
+      this.minScale = options.minScale || 0.1;
+      this.maxScale = options.maxScale || 3;
+      this.zoomStep = options.step || 0.1;
+
+      // Transform state - single source of truth
+      this.scale = 1;
+      this.translateX = 0;
+      this.translateY = 0;
+
+      // Drag state
+      this.isDragging = false;
+      this.dragStartX = 0;
+      this.dragStartY = 0;
+      this.dragStartTranslateX = 0;
+      this.dragStartTranslateY = 0;
+
+      // Bind event handlers
+      this._handleWheel = this._handleWheel.bind(this);
+      this._handlePointerDown = this._handlePointerDown.bind(this);
+      this._handlePointerMove = this._handlePointerMove.bind(this);
+      this._handlePointerUp = this._handlePointerUp.bind(this);
+
+      // Set transform origin to top-left so our math works correctly
+      this.element.style.transformOrigin = '0 0';
+
+      // Initialize
+      this._attachEventListeners();
+      this._applyTransform();
+    }
+
+    _attachEventListeners() {
+      // Wheel zoom on viewport with capture to ensure we handle it first
+      this.viewport.addEventListener('wheel', this._handleWheel, {
+        passive: false,
+        capture: true
+      });
+
+      // Drag panning on element
+      this.element.addEventListener('pointerdown', this._handlePointerDown);
+      // Move and up on document to handle drag outside element
+      document.addEventListener('pointermove', this._handlePointerMove);
+      document.addEventListener('pointerup', this._handlePointerUp);
+    }
+
+    _handleWheel(event) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      // Calculate scale change
+      const delta = -event.deltaY;
+      const scaleChange = delta > 0 ? this.zoomStep : -this.zoomStep;
+      const newScale = Math.max(
+        this.minScale,
+        Math.min(this.maxScale, this.scale + scaleChange)
+      );
+
+      // If scale didn't change (hit min/max), do nothing
+      if (newScale === this.scale) return;
+
+      // Get focal point in viewport coordinates
+      const viewportRect = this.viewport.getBoundingClientRect();
+      const focalX = event.clientX - viewportRect.left;
+      const focalY = event.clientY - viewportRect.top;
+
+      // Calculate the container point at the focal position
+      // Transform from viewport coords to container coords
+      const containerX = (focalX - this.translateX) / this.scale;
+      const containerY = (focalY - this.translateY) / this.scale;
+
+      // Calculate new translation to keep that point at the focal position
+      const newTranslateX = focalX - containerX * newScale;
+      const newTranslateY = focalY - containerY * newScale;
+
+      // Update state and apply
+      this.scale = newScale;
+      this.translateX = newTranslateX;
+      this.translateY = newTranslateY;
+      this._applyTransform();
+
+      // Dispatch change event
+      this._dispatchChangeEvent();
+    }
+
+    _handlePointerDown(event) {
+      // Only handle primary button (left click / touch)
+      if (event.button !== 0) return;
+
+      // Don't interfere with interactive elements
+      const target = event.target;
+      if (this._isInteractiveElement(target)) {
+        return;
+      }
+
+      // Start dragging
+      this.isDragging = true;
+      this.dragStartX = event.clientX;
+      this.dragStartY = event.clientY;
+      this.dragStartTranslateX = this.translateX;
+      this.dragStartTranslateY = this.translateY;
+
+      // Prevent text selection during drag
+      event.preventDefault();
+
+      // Change cursor
+      this.element.style.cursor = 'grabbing';
+    }
+
+    _isInteractiveElement(element) {
+      // Check if element is a form control or other interactive element
+      if (element.matches) {
+        return element.matches('select, input, textarea, button, a, [contenteditable], [data-dest]');
+      }
+      return false;
+    }
+
+    _handlePointerMove(event) {
+      if (!this.isDragging) return;
+
+      // Calculate delta from drag start
+      const deltaX = event.clientX - this.dragStartX;
+      const deltaY = event.clientY - this.dragStartY;
+
+      // Update translation
+      this.translateX = this.dragStartTranslateX + deltaX;
+      this.translateY = this.dragStartTranslateY + deltaY;
+      this._applyTransform();
+
+      // Dispatch change event
+      this._dispatchChangeEvent();
+    }
+
+    _handlePointerUp(event) {
+      if (!this.isDragging) return;
+
+      this.isDragging = false;
+      this.element.style.cursor = 'grab';
+    }
+
+    _applyTransform(animate = false) {
+      if (animate) {
+        this.element.style.transition = 'transform 0.3s ease-in-out';
+      }
+
+      this.element.style.transform =
+        `matrix(${this.scale}, 0, 0, ${this.scale}, ${this.translateX}, ${this.translateY})`;
+
+      if (animate) {
+        // Remove transition after animation completes
+        setTimeout(() => {
+          this.element.style.transition = '';
+        }, 300);
+      }
+    }
+
+    _dispatchChangeEvent() {
+      const event = new CustomEvent('transformchange', {
+        detail: {
+          scale: this.scale,
+          x: this.translateX,
+          y: this.translateY
+        }
+      });
+      this.element.dispatchEvent(event);
+    }
+
+    // Public API
+
+    /**
+     * Get current transform state
+     */
+    getScale() {
+      return this.scale;
+    }
+
+    getPan() {
+      return { x: this.translateX, y: this.translateY };
+    }
+
+    /**
+     * Set zoom level
+     * @param {number} scale - Target scale
+     * @param {Object} options - Options
+     * @param {boolean} options.animate - Whether to animate
+     * @param {Object} options.focal - Focal point {x, y} in viewport coordinates
+     */
+    zoom(scale, options = {}) {
+      const newScale = Math.max(this.minScale, Math.min(this.maxScale, scale));
+
+      if (options.focal) {
+        // Zoom to focal point
+        const containerX = (options.focal.x - this.translateX) / this.scale;
+        const containerY = (options.focal.y - this.translateY) / this.scale;
+
+        this.translateX = options.focal.x - containerX * newScale;
+        this.translateY = options.focal.y - containerY * newScale;
+      }
+
+      this.scale = newScale;
+      this._applyTransform(options.animate);
+      this._dispatchChangeEvent();
+    }
+
+    /**
+     * Set pan position
+     * @param {number} x - X translation
+     * @param {number} y - Y translation
+     * @param {Object} options - Options
+     * @param {boolean} options.animate - Whether to animate
+     */
+    pan(x, y, options = {}) {
+      this.translateX = x;
+      this.translateY = y;
+      this._applyTransform(options.animate);
+      this._dispatchChangeEvent();
+    }
+
+    /**
+     * Clean up event listeners
+     */
+    destroy() {
+      this.viewport.removeEventListener('wheel', this._handleWheel, { capture: true });
+      this.element.removeEventListener('pointerdown', this._handlePointerDown);
+      document.removeEventListener('pointermove', this._handlePointerMove);
+      document.removeEventListener('pointerup', this._handlePointerUp);
+    }
+  }
+
+  // src/JourneyVisualizer.js
+
+  class JourneyVisualizer {
+    constructor(containerSelector, options = {}) {
+      this.container = document.querySelector(containerSelector);
+
+      if (!this.container) {
+        throw new Error(`Container not found: ${containerSelector}`);
+      }
+
+      this.options = this._mergeOptions(options);
+      this.steps = [];
+      this.graph = null;
+      this.zoomPanController = null;
+    }
+
+    _mergeOptions(userOptions) {
+      const defaults = {
+        layout: {
+          direction: 'TB',
+          rankSep: 120,
+          nodeSep: 150,
+          edgeSep: 50,
+          align: 'DL',
+          ranker: 'tight-tree'
+        },
+        zoom: {
+          initial: 1,
+          min: 0.1,
+          max: 3,
+          step: 0.03
+        },
+        arrows: {
+          showLabels: true,
+          color: '#333',
+          width: 2
+        },
+        navigation: {
+          animationDuration: 300,
+          highlightOnNavigate: true
+        }
+      };
+
+      return {
+        layout: { ...defaults.layout, ...userOptions.layout },
+        zoom: { ...defaults.zoom, ...userOptions.zoom },
+        arrows: { ...defaults.arrows, ...userOptions.arrows },
+        navigation: { ...defaults.navigation, ...userOptions.navigation }
+      };
+    }
+
+    _discoverSteps() {
+      const stepElements = this.container.querySelectorAll('.step');
+      const stepIds = new Set();
+
+      stepElements.forEach(stepElement => {
+        // Validate ID exists
+        if (!stepElement.id) {
+          console.warn(`Step missing ID: ${stepElement.outerHTML.substring(0, 50)}...`);
+          return;
+        }
+
+        // Validate ID is unique
+        if (stepIds.has(stepElement.id)) {
+          console.warn(`Duplicate step ID: ${stepElement.id}`);
+          return;
+        }
+
+        stepIds.add(stepElement.id);
+        this.steps.push(stepElement);
+      });
+
+      if (this.steps.length === 0) {
+        throw new Error('No steps found with class="step"');
+      }
+    }
+
+    _buildGraph() {
+      this.graph = new dagre.graphlib.Graph();
+
+      // Configure graph layout
+      this.graph.setGraph({
+        rankdir: this.options.layout.direction,
+        ranksep: this.options.layout.rankSep,
+        nodesep: this.options.layout.nodeSep,
+        edgesep: this.options.layout.edgeSep,
+        align: this.options.layout.align,
+        ranker: this.options.layout.ranker
+      });
+
+      // Set position:absolute on steps BEFORE measuring to get accurate dimensions
+      this.steps.forEach(step => {
+        step.style.position = 'absolute';
+      });
+
+      // Add nodes with accurate measurements
+      this.steps.forEach(step => {
+        const rect = step.getBoundingClientRect();
+
+        this.graph.setNode(step.id, {
+          width: rect.width || 200,  // Default width if not rendered
+          height: rect.height || 100, // Default height if not rendered
+          element: step
+        });
+      });
+
+      // Add edges
+      const validStepIds = new Set(this.steps.map(s => s.id));
+
+      this.steps.forEach(step => {
+        const actions = step.querySelectorAll('[data-dest]');
+
+        actions.forEach(action => {
+          const destId = action.getAttribute('data-dest');
+          const label = action.textContent.trim();
+
+          // Validate destination exists
+          if (!validStepIds.has(destId)) {
+            console.warn(`Invalid destination: ${step.id} -> ${destId}`);
+            return;
+          }
+
+          this.graph.setEdge(step.id, destId, {
+            label: label,
+            sourceElement: action
+          });
+        });
+      });
+    }
+
+    _computeLayout() {
+      console.time('dagre-layout');
+      dagre.layout(this.graph);
+      console.timeEnd('dagre-layout');
+    }
+
+    _positionSteps() {
+      let minX = Infinity, minY = Infinity;
+      let maxX = -Infinity, maxY = -Infinity;
+
+      // First pass: track bounds
+      const positions = new Map();
+      this.graph.nodes().forEach(nodeId => {
+        const node = this.graph.node(nodeId);
+
+        // Dagre gives center coordinates, convert to top-left
+        const x = node.x - node.width / 2;
+        const y = node.y - node.height / 2;
+
+        positions.set(nodeId, { x, y });
+
+        // Track bounds
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x + node.width);
+        maxY = Math.max(maxY, y + node.height);
+      });
+
+      // Calculate padding based on viewport size to allow centering any step
+      // Use viewport dimensions if available, otherwise fallback to reasonable default
+      const viewport = this.container.parentElement;
+      let padding = 50; // Minimum padding for aesthetics
+
+      if (viewport) {
+        // Add at least half the viewport dimensions as padding
+        // This ensures any step can be panned to the center
+        const viewportPadding = Math.max(viewport.clientWidth / 2, viewport.clientHeight / 2);
+        padding = Math.max(padding, viewportPadding);
+      }
+
+      // Second pass: position steps with padding offset
+      this.graph.nodes().forEach(nodeId => {
+        const node = this.graph.node(nodeId);
+        const step = node.element;
+        const pos = positions.get(nodeId);
+
+        // Shift by padding and normalize to container origin
+        const x = pos.x - minX + padding;
+        const y = pos.y - minY + padding;
+
+        step.style.position = 'absolute';
+        step.style.left = `${x}px`;
+        step.style.top = `${y}px`;
+      });
+
+      const width = maxX - minX + padding * 2;
+      const height = maxY - minY + padding * 2;
+
+      this.container.style.width = `${width}px`;
+      this.container.style.height = `${height}px`;
+      this.container.style.position = 'relative';
+
+      // Store bounds for later use
+      this.bounds = { minX, minY, maxX, maxY, padding };
+    }
+
+    _createSvgOverlay(width, height) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+
+      svg.setAttribute('width', width);
+      svg.setAttribute('height', height);
+      svg.setAttribute('class', 'journey-svg-overlay');
+
+      svg.style.position = 'absolute';
+      svg.style.top = '0px';
+      svg.style.left = '0px';
+      svg.style.pointerEvents = 'none';
+      svg.style.zIndex = '10';
+
+      // Create arrowhead marker definition
+      const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+
+      marker.setAttribute('id', 'arrowhead');
+      marker.setAttribute('markerWidth', '10');
+      marker.setAttribute('markerHeight', '10');
+      marker.setAttribute('refX', '9');
+      marker.setAttribute('refY', '3');
+      marker.setAttribute('orient', 'auto');
+      marker.setAttribute('markerUnits', 'strokeWidth');
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M0,0 L0,6 L9,3 z');
+      path.setAttribute('fill', this.options.arrows.color);
+
+      marker.appendChild(path);
+      defs.appendChild(marker);
+      svg.appendChild(defs);
+
+      this.container.appendChild(svg);
+      this.svgOverlay = svg;
+    }
+
+    _drawArrows() {
+      // Calculate offset to account for padding added in _positionSteps
+      const offsetX = -this.bounds.minX + this.bounds.padding;
+      const offsetY = -this.bounds.minY + this.bounds.padding;
+
+      // First pass: draw all arrow paths and collect label data
+      const labelData = [];
+
+      this.graph.edges().forEach(edgeObj => {
+        const edge = this.graph.edge(edgeObj);
+
+        // Build SVG path from Dagre-computed points, offset by padding
+        const pathData = edge.points
+          .map((point, i) => {
+            const x = point.x + offsetX;
+            const y = point.y + offsetY;
+            return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+          })
+          .join(' ');
+
+        // Create arrow path
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', pathData);
+        path.setAttribute('class', 'journey-arrow');
+        path.setAttribute('marker-end', 'url(#arrowhead)');
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', this.options.arrows.color);
+        path.setAttribute('stroke-width', this.options.arrows.width);
+
+        this.svgOverlay.appendChild(path);
+
+        // Collect label data for collision detection
+        if (this.options.arrows.showLabels && edge.label) {
+          const bbox = { width: edge.label.length * 7, height: 16 };
+          labelData.push({
+            edge: edge,
+            edgePoints: edge.points,
+            label: edge.label,
+            bbox: bbox,
+            position: 0.5  // Start at midpoint (50%)
+          });
+        }
+      });
+
+      // Second pass: detect collisions and adjust label positions
+      if (labelData.length > 0) {
+        this._adjustLabelPositions(labelData);
+
+        // Third pass: render labels at adjusted positions
+        labelData.forEach(data => {
+          const point = this._getPointAlongEdge(data.edgePoints, data.position);
+          const midX = point.x + offsetX;
+          const midY = point.y + offsetY;
+
+          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', midX);
+          text.setAttribute('y', midY);
+          text.setAttribute('class', 'arrow-label');
+          text.setAttribute('text-anchor', 'middle');
+          text.setAttribute('dominant-baseline', 'middle');
+          text.setAttribute('fill', this.options.arrows.color);
+          text.setAttribute('font-size', '12px');
+          text.setAttribute('font-family', 'system-ui, sans-serif');
+          text.textContent = data.label;
+
+          // Add white background for readability
+          const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          bgRect.setAttribute('x', midX - data.bbox.width / 2 - 4);
+          bgRect.setAttribute('y', midY - data.bbox.height / 2 - 2);
+          bgRect.setAttribute('width', data.bbox.width + 8);
+          bgRect.setAttribute('height', data.bbox.height + 4);
+          bgRect.setAttribute('fill', 'white');
+          bgRect.setAttribute('stroke', '#ccc');
+          bgRect.setAttribute('stroke-width', '1');
+          bgRect.setAttribute('rx', '3');
+
+          this.svgOverlay.appendChild(bgRect);
+          this.svgOverlay.appendChild(text);
+        });
+      }
+    }
+
+    _getPointAlongEdge(points, position) {
+      // Get a point along the edge path at the given position (0.0 to 1.0)
+      // position 0.0 = start, 0.5 = midpoint, 1.0 = end
+
+      if (points.length === 0) return { x: 0, y: 0 };
+      if (points.length === 1) return points[0];
+
+      // Calculate total path length
+      let totalLength = 0;
+      const segments = [];
+      for (let i = 0; i < points.length - 1; i++) {
+        const dx = points[i + 1].x - points[i].x;
+        const dy = points[i + 1].y - points[i].y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        segments.push({ start: points[i], end: points[i + 1], length: length });
+        totalLength += length;
+      }
+
+      // Find the segment that contains our target position
+      const targetLength = totalLength * position;
+      let currentLength = 0;
+
+      for (const segment of segments) {
+        if (currentLength + segment.length >= targetLength) {
+          // This segment contains our target point
+          const segmentPosition = (targetLength - currentLength) / segment.length;
+          return {
+            x: segment.start.x + (segment.end.x - segment.start.x) * segmentPosition,
+            y: segment.start.y + (segment.end.y - segment.start.y) * segmentPosition
+          };
+        }
+        currentLength += segment.length;
+      }
+
+      // Fallback: return the last point
+      return points[points.length - 1];
+    }
+
+    _adjustLabelPositions(labelData) {
+      // Detect collisions and adjust label positions along their edge paths
+      const maxIterations = 5;
+      const adjustmentStep = 0.05;  // Move 5% along the edge path per iteration
+
+      for (let iteration = 0; iteration < maxIterations; iteration++) {
+        let hadCollision = false;
+
+        // Check all pairs for collisions
+        for (let i = 0; i < labelData.length; i++) {
+          for (let j = i + 1; j < labelData.length; j++) {
+            const label1 = labelData[i];
+            const label2 = labelData[j];
+
+            // Get current positions with offsets
+            const offsetX = -this.bounds.minX + this.bounds.padding;
+            const offsetY = -this.bounds.minY + this.bounds.padding;
+
+            const point1 = this._getPointAlongEdge(label1.edgePoints, label1.position);
+            const point2 = this._getPointAlongEdge(label2.edgePoints, label2.position);
+
+            const x1 = point1.x + offsetX;
+            const y1 = point1.y + offsetY;
+            const x2 = point2.x + offsetX;
+            const y2 = point2.y + offsetY;
+
+            // Check for rectangle overlap (with padding)
+            const padding = 4;
+            const rect1 = {
+              left: x1 - label1.bbox.width / 2 - padding,
+              right: x1 + label1.bbox.width / 2 + padding,
+              top: y1 - label1.bbox.height / 2 - padding,
+              bottom: y1 + label1.bbox.height / 2 + padding
+            };
+
+            const rect2 = {
+              left: x2 - label2.bbox.width / 2 - padding,
+              right: x2 + label2.bbox.width / 2 + padding,
+              top: y2 - label2.bbox.height / 2 - padding,
+              bottom: y2 + label2.bbox.height / 2 + padding
+            };
+
+            if (this._rectanglesOverlap(rect1, rect2)) {
+              hadCollision = true;
+
+              // Move labels toward their source (decrease position value)
+              // Keep positions between 0.2 and 0.8 to stay on the edge
+              label1.position = Math.max(0.2, label1.position - adjustmentStep);
+              label2.position = Math.min(0.8, label2.position + adjustmentStep);
+            }
+          }
+        }
+
+        // If no collisions detected, we're done
+        if (!hadCollision) break;
+      }
+    }
+
+    _rectanglesOverlap(rect1, rect2) {
+      return rect1.left < rect2.right &&
+             rect1.right > rect2.left &&
+             rect1.top < rect2.bottom &&
+             rect1.bottom > rect2.top;
+    }
+
+    _initializePanZoom() {
+      const viewport = this.container.parentElement;
+
+      if (!viewport) {
+        console.warn('No viewport found for zoom/pan initialization');
+        return;
+      }
+
+      // Create zoom/pan controller with our options
+      this.zoomPanController = new ZoomPanController(this.container, viewport, {
+        minScale: this.options.zoom.min,
+        maxScale: this.options.zoom.max,
+        step: this.options.zoom.step
+      });
+
+      // Set cursor style for dragging
+      this.container.style.cursor = 'grab';
+    }
+
+
+    _findStartStep() {
+      const startStep = this.container.querySelector('[data-place="start"]');
+
+      if (!startStep) {
+        console.warn('No start step found with data-place="start", defaulting to first step');
+        return this.steps[0];
+      }
+
+      return startStep;
+    }
+
+    _navigateToStart() {
+      // Check for URL fragment first
+      const urlFragment = this._getUrlFragment();
+      let targetStep = null;
+
+      if (urlFragment) {
+        // Try to find step matching the URL fragment
+        const fragmentStep = document.getElementById(urlFragment);
+        if (fragmentStep && this.steps.includes(fragmentStep)) {
+          targetStep = fragmentStep;
+        }
+      }
+
+      // Fall back to start step if no valid fragment
+      if (!targetStep) {
+        targetStep = this._findStartStep();
+      }
+
+      if (!targetStep || !this.zoomPanController) {
+        return;
+      }
+
+      const viewport = this.container.parentElement;
+
+      if (!viewport) {
+        return;
+      }
+
+      // Set initial zoom
+      const scale = this.options.zoom.initial;
+      this.zoomPanController.zoom(scale, { animate: false });
+
+      // Use offset positions (untransformed coordinates)
+      const stepCenterX = targetStep.offsetLeft + targetStep.offsetWidth / 2;
+      const stepTopY = targetStep.offsetTop;
+
+      // Calculate target pan to center horizontally and position 20px from top vertically
+      const targetX = (viewport.clientWidth / 2) - (stepCenterX * scale);
+      const targetY = 20 - (stepTopY * scale);
+
+      // Apply pan
+      this.zoomPanController.pan(targetX, targetY, { animate: false });
+
+      // Add highlight to starting step
+      targetStep.classList.add('journey-step-current');
+    }
+
+    _getUrlFragment() {
+      // Get URL fragment without the # prefix
+      const hash = window.location.hash;
+      return hash ? hash.substring(1) : '';
+    }
+
+    // Public API methods
+    navigateTo(stepId, options = {}) {
+      const step = document.getElementById(stepId);
+
+      if (!step) {
+        console.warn(`Step not found: ${stepId}`);
+        return;
+      }
+
+      if (!this.zoomPanController) {
+        console.warn('ZoomPanController not initialized');
+        return;
+      }
+
+      const viewport = this.container.parentElement;
+
+      if (!viewport) {
+        return;
+      }
+
+      // Set zoom if specified
+      if (options.zoom) {
+        this.zoomPanController.zoom(options.zoom, { animate: false });
+      }
+
+      // Get current scale
+      const scale = this.zoomPanController.getScale();
+
+      // Use offset positions (untransformed coordinates)
+      const stepCenterX = step.offsetLeft + step.offsetWidth / 2;
+      const stepTopY = step.offsetTop;
+
+      // Calculate target pan to center horizontally and position 20px from top vertically
+      const targetX = (viewport.clientWidth / 2) - (stepCenterX * scale);
+      const targetY = 20 - (stepTopY * scale);
+
+      // Apply animation if requested
+      const animate = options.animate !== undefined ? options.animate : true;
+
+      // Apply pan
+      this.zoomPanController.pan(targetX, targetY, { animate: animate });
+
+      const previousStep = this.currentStep;
+      this.currentStep = stepId;
+
+      // Remove highlight from previous step
+      if (previousStep) {
+        const prevStepElement = document.getElementById(previousStep);
+        if (prevStepElement) {
+          prevStepElement.classList.remove('journey-step-current');
+        }
+      }
+
+      // Add persistent highlight to current step
+      step.classList.add('journey-step-current');
+
+      // Add temporary highlight animation if enabled
+      if (this.options.navigation.highlightOnNavigate) {
+        step.classList.add('journey-step-highlight');
+        setTimeout(() => {
+          step.classList.remove('journey-step-highlight');
+        }, 1000);
+      }
+
+      // Update URL fragment
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', `#${stepId}`);
+      } else {
+        window.location.hash = stepId;
+      }
+
+      // Emit navigate event
+      this._emit('navigate', { from: previousStep, to: stepId });
+    }
+
+    reset() {
+      this._navigateToStart();
+    }
+
+    refresh() {
+      // Re-measure and re-layout
+      this._buildGraph();
+      this._computeLayout();
+      this._positionSteps();
+
+      // Redraw arrows
+      if (this.svgOverlay) {
+        this.svgOverlay.innerHTML = '';
+        this._createSvgOverlay(
+          parseInt(this.container.style.width),
+          parseInt(this.container.style.height)
+        );
+      }
+      this._drawArrows();
+
+      this._emit('layout-complete');
+    }
+
+    getState() {
+      return {
+        currentStep: this.currentStep,
+        totalSteps: this.steps.length,
+        scale: this.zoomPanController ? this.zoomPanController.getScale() : 1,
+        pan: this.zoomPanController ? this.zoomPanController.getPan() : { x: 0, y: 0 }
+      };
+    }
+
+    destroy() {
+      if (this.zoomPanController) {
+        this.zoomPanController.destroy();
+        this.zoomPanController = null;
+      }
+
+      if (this.svgOverlay && this.svgOverlay.parentNode) {
+        this.svgOverlay.parentNode.removeChild(this.svgOverlay);
+      }
+
+      this._emit('destroy');
+    }
+
+    // Event system
+    on(eventName, callback) {
+      if (!this.eventHandlers) {
+        this.eventHandlers = {};
+      }
+      if (!this.eventHandlers[eventName]) {
+        this.eventHandlers[eventName] = [];
+      }
+      this.eventHandlers[eventName].push(callback);
+    }
+
+    _emit(eventName, data) {
+      if (!this.eventHandlers || !this.eventHandlers[eventName]) {
+        return;
+      }
+      this.eventHandlers[eventName].forEach(callback => callback(data));
+    }
+
+    // Main initialization method
+    async init() {
+      try {
+        console.time('journey-init');
+
+        // Wait for fonts and images to load for accurate measurements
+        await this._waitForContentReady();
+
+        // Step-by-step initialization
+        this._discoverSteps();
+        this._buildGraph();
+        this._computeLayout();
+        this._positionSteps();
+
+        const width = parseInt(this.container.style.width);
+        const height = parseInt(this.container.style.height);
+        this._createSvgOverlay(width, height);
+        this._drawArrows();
+
+        this._initializePanZoom();
+        this._setupButtonHandlers();
+
+        // Wait for panzoom to fully initialize before navigating to start
+        await new Promise(resolve => setTimeout(resolve, 0));
+        this._navigateToStart();
+
+        // Set currentStep based on URL fragment or start step
+        const urlFragment = this._getUrlFragment();
+        if (urlFragment) {
+          const fragmentStep = document.getElementById(urlFragment);
+          if (fragmentStep && this.steps.includes(fragmentStep)) {
+            this.currentStep = fragmentStep.id;
+          } else {
+            this.currentStep = this._findStartStep().id;
+          }
+        } else {
+          this.currentStep = this._findStartStep().id;
+        }
+
+        console.timeEnd('journey-init');
+        this._emit('layout-complete');
+
+        return this;
+      } catch (error) {
+        console.error('Initialization failed:', error);
+        throw error;
+      }
+    }
+
+    async _waitForContentReady() {
+      // Wait for fonts
+      if (document.fonts && document.fonts.ready) {
+        await document.fonts.ready;
+      }
+
+      // Wait for images
+      const images = Array.from(this.container.querySelectorAll('img'))
+        .filter(img => !img.complete);
+
+      if (images.length > 0) {
+        await Promise.all(
+          images.map(img => new Promise(resolve => {
+            img.onload = resolve;
+            img.onerror = resolve; // Continue even if image fails
+          }))
+        );
+      }
+    }
+
+    _setupButtonHandlers() {
+      const buttons = this.container.querySelectorAll('[data-dest]');
+
+      buttons.forEach(button => {
+        button.addEventListener('click', (e) => {
+          const destId = button.getAttribute('data-dest');
+          if (destId) {
+            this.navigateTo(destId, { animate: true });
+          }
+        });
+      });
+    }
+  }
+
+  exports.JourneyVisualizer = JourneyVisualizer;
+
+}));
+
+  </script>
+
+  <script>
+    const visualizer = new JourneyVisualizer.JourneyVisualizer('.journey-container');
+    visualizer.init();
+  </script>
+</body>
+</html>
