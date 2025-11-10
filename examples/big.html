@@ -1892,8 +1892,21 @@ body {
 
     _getUrlFragment() {
       // Get URL fragment without the # prefix
+      // Parse format: #step:step-2 → step-2
+      // This prevents browser from auto-scrolling to element with matching id
       const hash = window.location.hash;
-      return hash ? hash.substring(1) : '';
+      if (!hash) return '';
+
+      const hashValue = hash.substring(1);
+
+      // New format: step:step-id
+      if (hashValue.startsWith('step:')) {
+        return hashValue.substring(5); // Remove 'step:' prefix
+      }
+
+      // Backward compatibility: support old format without prefix
+      // This allows existing bookmarks to continue working
+      return hashValue;
     }
 
     // Public API methods
@@ -1960,11 +1973,12 @@ body {
         }, 1000);
       }
 
-      // Update URL fragment
+      // Update URL fragment with step: prefix
+      // This prevents browser from auto-scrolling to element with matching id
       if (window.history && window.history.replaceState) {
-        window.history.replaceState(null, '', `#${stepId}`);
+        window.history.replaceState(null, '', `#step:${stepId}`);
       } else {
-        window.location.hash = stepId;
+        window.location.hash = `step:${stepId}`;
       }
 
       // Emit navigate event

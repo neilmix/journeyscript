@@ -74,8 +74,8 @@ describe('Browser URL Fragment Navigation', () => {
   });
 
   it('should navigate to step from URL fragment on page load', async () => {
-    // Navigate to page with URL fragment
-    await browser.Page.navigate({ url: `http://localhost:${port}/examples/test-url-fragment.html#step-2` });
+    // Navigate to page with URL fragment using new step: prefix format
+    await browser.Page.navigate({ url: `http://localhost:${port}/examples/test-url-fragment.html#step:step-2` });
 
     // Wait for page to load
     await new Promise((resolve) => {
@@ -124,8 +124,8 @@ describe('Browser URL Fragment Navigation', () => {
   }, 10000);
 
   it('should fall back to start step with invalid URL fragment', async () => {
-    // Navigate to page with invalid URL fragment
-    await browser.Page.navigate({ url: `http://localhost:${port}/examples/test-url-fragment.html#invalid-step` });
+    // Navigate to page with invalid URL fragment using new step: prefix format
+    await browser.Page.navigate({ url: `http://localhost:${port}/examples/test-url-fragment.html#step:invalid-step` });
 
     // Wait for page to load
     await new Promise((resolve) => {
@@ -173,12 +173,12 @@ describe('Browser URL Fragment Navigation', () => {
     // Wait for navigation to complete
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Check URL has been updated with the fragment
+    // Check URL has been updated with the fragment (new step: prefix format)
     const urlResult = await browser.Runtime.evaluate({
       expression: `window.location.hash`
     });
 
-    expect(urlResult.result.value).toBe('#step-2');
+    expect(urlResult.result.value).toBe('#step:step-2');
 
     // Also verify the current step
     const stepResult = await browser.Runtime.evaluate({
@@ -214,7 +214,7 @@ describe('Browser URL Fragment Navigation', () => {
     let urlResult = await browser.Runtime.evaluate({
       expression: `window.location.hash`
     });
-    expect(urlResult.result.value).toBe('#step-2');
+    expect(urlResult.result.value).toBe('#step:step-2');
 
     // Navigate to complete
     await browser.Runtime.evaluate({
@@ -225,7 +225,7 @@ describe('Browser URL Fragment Navigation', () => {
     urlResult = await browser.Runtime.evaluate({
       expression: `window.location.hash`
     });
-    expect(urlResult.result.value).toBe('#complete');
+    expect(urlResult.result.value).toBe('#step:complete');
 
     // Navigate back to welcome
     await browser.Runtime.evaluate({
@@ -236,6 +236,6 @@ describe('Browser URL Fragment Navigation', () => {
     urlResult = await browser.Runtime.evaluate({
       expression: `window.location.hash`
     });
-    expect(urlResult.result.value).toBe('#welcome');
+    expect(urlResult.result.value).toBe('#step:welcome');
   }, 15000);
 });

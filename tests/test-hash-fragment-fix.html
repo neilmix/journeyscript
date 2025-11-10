@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Hash Fragment Fix</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    .journey-viewport {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      position: relative;
+      background: #f5f5f5;
+    }
+
+    .journey-container {
+      position: relative;
+    }
+
+    .step {
+      background: white;
+      border: 2px solid #333;
+      border-radius: 8px;
+      padding: 20px;
+      min-width: 200px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .step h2 {
+      margin: 0 0 10px 0;
+      font-size: 18px;
+    }
+
+    .step p {
+      margin: 0 0 15px 0;
+      font-size: 14px;
+      color: #666;
+    }
+
+    .step button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 8px;
+      font-size: 14px;
+    }
+
+    .step button:hover {
+      background: #0056b3;
+    }
+
+    .journey-step-current {
+      border-color: #007bff !important;
+      border-width: 3px !important;
+      box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.3), 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .info-panel {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      font-size: 12px;
+      z-index: 1000;
+    }
+
+    .info-panel h3 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+    }
+
+    .info-panel a {
+      display: block;
+      margin: 5px 0;
+      color: #007bff;
+      text-decoration: none;
+    }
+
+    .info-panel a:hover {
+      text-decoration: underline;
+    }
+
+    .test-links {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #ddd;
+    }
+  </style>
+</head>
+<body>
+  <div class="info-panel">
+    <h3>Hash Fragment Test</h3>
+    <div>Current hash: <strong id="current-hash">(none)</strong></div>
+    <div class="test-links">
+      <strong>Test Links:</strong>
+      <a href="#step:welcome">New format: #step:welcome</a>
+      <a href="#step:step-2">New format: #step:step-2</a>
+      <a href="#step:complete">New format: #step:complete</a>
+      <a href="#welcome">Old format: #welcome (backward compat)</a>
+      <a href="#step-2">Old format: #step-2 (backward compat)</a>
+    </div>
+  </div>
+
+  <div class="journey-viewport">
+    <div class="journey-container">
+      <div class="step" id="welcome" data-place="start">
+        <h2>Welcome</h2>
+        <p>This is the start step. Test URL fragment navigation!</p>
+        <button data-dest="step-2">Next Step</button>
+      </div>
+
+      <div class="step" id="step-2" data-from="welcome">
+        <h2>Step 2</h2>
+        <p>This is step 2. The browser should NOT auto-scroll to this element when you use #step:step-2 in the URL.</p>
+        <button data-dest="welcome">Back</button>
+        <button data-dest="complete">Finish</button>
+      </div>
+
+      <div class="step" id="complete" data-from="step-2">
+        <h2>Complete</h2>
+        <p>You've reached the end!</p>
+        <button data-dest="welcome">Restart</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JourneyVisualizer } from '../src/JourneyVisualizer.js';
+
+    // Update current hash display
+    function updateHashDisplay() {
+      const hashEl = document.getElementById('current-hash');
+      hashEl.textContent = window.location.hash || '(none)';
+    }
+
+    // Update on hash change
+    window.addEventListener('hashchange', updateHashDisplay);
+    updateHashDisplay();
+
+    // Initialize visualizer
+    const visualizer = new JourneyVisualizer('.journey-container');
+    await visualizer.init();
+
+    // Make visualizer available for debugging
+    window.visualizer = visualizer;
+
+    console.log('JourneyVisualizer initialized');
+    console.log('Current step:', visualizer.currentStep);
+    console.log('URL hash:', window.location.hash);
+  </script>
+</body>
+</html>
