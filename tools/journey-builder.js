@@ -11,7 +11,7 @@ export function slugify(text) {
     .replace(/^-+|-+$/g, '');
 }
 
-// Check if a URL is external
+// Check if a URL is external (has protocol)
 export function isExternalUrl(url) {
   try {
     new URL(url);
@@ -19,6 +19,47 @@ export function isExternalUrl(url) {
   } catch {
     return false;
   }
+}
+
+// Check if a href looks like a link vs a likely typo'd step name
+export function looksLikeLink(href) {
+  // Absolute URLs with protocol - definitely a link
+  if (isExternalUrl(href)) {
+    return true;
+  }
+
+  // Starts with /, ./, or ../ - relative path, definitely a link
+  if (href.startsWith('/') || href.startsWith('./') || href.startsWith('../')) {
+    return true;
+  }
+
+  // Contains file extension - probably a link
+  if (/\.(html?|php|aspx?|jsp|pdf|doc|txt|xml|json)$/i.test(href)) {
+    return true;
+  }
+
+  // Contains / (path separator) - probably a link
+  if (href.includes('/')) {
+    return true;
+  }
+
+  // Contains . but no spaces - could be domain or file
+  if (href.includes('.') && !href.includes(' ')) {
+    return true;
+  }
+
+  // Contains # (fragment/anchor) - link-like
+  if (href.includes('#')) {
+    return true;
+  }
+
+  // Contains ? (query string) - link-like
+  if (href.includes('?')) {
+    return true;
+  }
+
+  // Otherwise, looks like it might be a typo'd step name
+  return false;
 }
 
 // Parse markdown into steps
@@ -119,21 +160,19 @@ export function renderStepContent(markdown, stepNames) {
   const linkRegex = /<a href="([^"]*)"[^>]*>([^<]*)<\/a>/g;
 
   let result = html.replace(linkRegex, (match, href, text) => {
-    // Check if it's an external URL
-    if (isExternalUrl(href)) {
-      return match; // Keep as regular link
-    }
-
-    // href should now be a step ID (already slugified)
-    // Check if it's one of our step IDs
+    // Check if it matches a step ID - convert to navigation button
     const stepIds = Array.from(stepNames.values());
     if (stepIds.includes(href)) {
       return `<button data-dest="${href}">${text}</button>`;
     }
 
-    // Link doesn't match a step - warn and create no-op button
-    console.warn(`Warning: Link target "${href}" does not match any step. Creating no-op button.`);
-    return `<button>${text}</button>`;
+    // Not a step - keep as a regular link
+    // Warn only if it looks like it might be a typo'd step name
+    if (!looksLikeLink(href)) {
+      console.warn(`Warning: Link target "${href}" does not match any step. Keeping as link, but this might be a typo.`);
+    }
+
+    return match; // Keep as regular link
   });
 
   // Handle buttons without explicit destinations: [Button Text]

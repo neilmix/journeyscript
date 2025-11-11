@@ -320,7 +320,7 @@ describe('renderStepContent', () => {
     expect(html).toContain('<button data-dest="welcome">Go Back</button>');
   });
 
-  it('should warn on broken links and create no-op button', () => {
+  it('should warn on broken links and keep as link', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const stepNames = new Map([['Welcome', 'welcome']]);
@@ -328,9 +328,9 @@ describe('renderStepContent', () => {
 
     const html = renderStepContent(markdown, stepNames);
 
-    expect(warnSpy).toHaveBeenCalledWith('Warning: Link target "Nonexistent" does not match any step. Creating no-op button.');
-    expect(html).toContain('<button>Next</button>');
-    expect(html).not.toContain('data-dest');
+    expect(warnSpy).toHaveBeenCalledWith('Warning: Link target "Nonexistent" does not match any step. Keeping as link, but this might be a typo.');
+    expect(html).toContain('<a href="Nonexistent">Next</a>');
+    expect(html).not.toContain('<button');
 
     warnSpy.mockRestore();
   });
