@@ -148,6 +148,8 @@ export function renderStepContent(markdown, stepNames) {
       // Replace step name with slugified ID so markdown-it can parse it
       const stepId = stepNames.get(target);
       return `[${text}](${stepId})`;
+    } else if (!looksLikeLink(target)) {
+      console.warn(`Warning: Link [${text}](${target}) does not match any step. Keeping as link, but this might be a typo.`);
     }
 
     // No matching step - keep original but will warn later
