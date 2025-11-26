@@ -1,15 +1,16 @@
 // tests/lane-integration.test.js
+// Tests for grid-based layout algorithm integration
 import { describe, it, expect, beforeEach } from 'vitest';
 import { JourneyVisualizer } from '../src/JourneyVisualizer.js';
 
-describe('Lane Layout Integration', () => {
+describe('Grid Layout Integration', () => {
   beforeEach(() => {
     // Reset DOM
     document.body.innerHTML = '';
   });
 
   describe('auto-selection', () => {
-    it('should use lane layout for simple linear graph', () => {
+    it('should use grid layout for simple linear graph', () => {
       document.body.innerHTML = `
         <div class="journey-viewport">
           <div class="journey-container">
@@ -29,10 +30,10 @@ describe('Lane Layout Integration', () => {
       visualizer._buildGraph();
       visualizer._computeLayout();
 
-      expect(visualizer.layoutAlgorithm).toBe('lane');
+      expect(visualizer.layoutAlgorithm).toBe('grid');
     });
 
-    it('should use lane layout for branch-and-merge pattern', () => {
+    it('should use grid layout for branch-and-merge pattern', () => {
       document.body.innerHTML = `
         <div class="journey-viewport">
           <div class="journey-container">
@@ -56,10 +57,10 @@ describe('Lane Layout Integration', () => {
       visualizer._buildGraph();
       visualizer._computeLayout();
 
-      expect(visualizer.layoutAlgorithm).toBe('lane');
+      expect(visualizer.layoutAlgorithm).toBe('grid');
     });
 
-    it('should use lane layout for graph with cycles', () => {
+    it('should use grid layout for graph with cycles', () => {
       document.body.innerHTML = `
         <div class="journey-viewport">
           <div class="journey-container">
@@ -80,11 +81,11 @@ describe('Lane Layout Integration', () => {
       visualizer._buildGraph();
       visualizer._computeLayout();
 
-      expect(visualizer.layoutAlgorithm).toBe('lane');
+      expect(visualizer.layoutAlgorithm).toBe('grid');
       expect(visualizer.laneAnalysis.stats.backEdgeCount).toBe(1);
     });
 
-    it('should store lane analysis when using lane layout', () => {
+    it('should store lane analysis when using grid layout', () => {
       document.body.innerHTML = `
         <div class="journey-viewport">
           <div class="journey-container">
@@ -108,7 +109,7 @@ describe('Lane Layout Integration', () => {
       visualizer._buildGraph();
       visualizer._computeLayout();
 
-      expect(visualizer.layoutAlgorithm).toBe('lane');
+      expect(visualizer.layoutAlgorithm).toBe('grid');
       expect(visualizer.laneAnalysis).toBeDefined();
       expect(visualizer.laneAnalysis.stats.nodeCount).toBe(4);
       expect(visualizer.laneAnalysis.stats.branchCount).toBeGreaterThan(1);
@@ -263,7 +264,7 @@ describe('Lane Layout Integration', () => {
       visualizer._buildGraph();
       visualizer._computeLayout();
 
-      expect(visualizer.layoutAlgorithm).toBe('lane');
+      expect(visualizer.layoutAlgorithm).toBe('grid');
 
       const nodeHub = visualizer.graph.node('hub');
       const nodeA = visualizer.graph.node('a');
@@ -315,7 +316,7 @@ describe('Lane Layout Integration', () => {
       visualizer._buildGraph();
       visualizer._computeLayout();
 
-      expect(visualizer.layoutAlgorithm).toBe('lane');
+      expect(visualizer.layoutAlgorithm).toBe('grid');
       expect(visualizer.laneAnalysis.isLaneCompatible).toBe(true);
 
       // All nodes should have valid positions
