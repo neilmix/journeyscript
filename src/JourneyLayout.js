@@ -1082,12 +1082,16 @@ export class JourneyLayout {
   /**
    * Build pixel path through gutters using lane-based routing
    *
+   * Key rule:
+   * - Corner exits/entries should have DIAGONAL lines (both X and Y change)
+   * - Side exits/entries should have PERPENDICULAR lines (only one axis changes)
+   *
    * Lane-based routing approach:
    * 1. Each gutter traversal has a "lane" at least edgeSpacing px from the parallel edge
-   * 2. Exit from corner point on node
-   * 3. Diagonal line to the point on the lane furthest from the corner in the intersection
+   * 2. Exit from node point (corner or side)
+   * 3. If corner: diagonal to lane; if side: perpendicular to lane
    * 4. Proceed STRAIGHT along the lane
-   * 5. Diagonal line from lane to entry corner point
+   * 5. If corner entry: diagonal from lane; if side entry: perpendicular from lane
    */
   _buildPixelPath(route, exitPoint, entryPoint, placements, rowY, colX, rowHeights, colWidths, hGutterSizes, vGutterSizes) {
     const sourcePlacement = placements.get(route.source);
@@ -1095,133 +1099,147 @@ export class JourneyLayout {
     const laneOffset = (route.lane || 0) * this.options.edgeSpacing;
     const laneMargin = this.options.edgeSpacing; // Distance from gutter edge to lane
 
-    if (route.routeType === 'horizontal-via-gutter') {
-      // Route: exit corner -> diagonal to lane -> straight along lane -> diagonal to entry corner
-      // The gutter is below the source row
-      const gutterTop = rowY[sourcePlacement.row] + rowHeights[sourcePlacement.row];
-      const gutterBottom = gutterTop + hGutterSizes[sourcePlacement.row];
+    // Helper to check if a side is a corner
+    const isCorner = (side) => side && side.includes('-');
 
-      // Lane is laneMargin px from the top of the gutter (plus any multi-edge offset)
+    if (route.routeType === 'horizontal-via-gutter') {
+      // Route through horizontal gutter below the row
+      const gutterTop = rowY[sourcePlacement.row] + rowHeights[sourcePlacement.row];
       const laneY = gutterTop + laneMargin + laneOffset;
 
-      // Determine direction
-      const goingRight = entryPoint.x > exitPoint.x;
+      const exitIsCorner = isCorner(route.exitSide);
+      const entryIsCorner = isCorner(route.entrySide);
 
-      // Point on lane where we enter (furthest from corner = closest to entry in this case)
-      // We go diagonally from exit to this point, then straight
-      const laneEntryX = exitPoint.x;
+      // For corners: diagonal means X changes as we go to the lane
+      // For sides: perpendicular means we go straight down/up to lane
+      let laneEntryX, laneExitX;
 
-      // Point on lane where we leave to go to entry
-      const laneExitX = entryPoint.x;
+      if (exitIsCorner) {
+        // Diagonal from corner: move X toward destination while going to lane Y
+        const xDistToLane = Math.abs(laneY - exitPoint.y);
+        const goingRight = entryPoint.x > exitPoint.x;
+        laneEntryX = goingRight ? exitPoint.x + xDistToLane : exitPoint.x - xDistToLane;
+      } else {
+        // Perpendicular from side: X stays same
+        laneEntryX = exitPoint.x;
+      }
+
+      if (entryIsCorner) {
+        // Diagonal to corner: X changes as we leave the lane
+        const xDistFromLane = Math.abs(entryPoint.y - laneY);
+        const comingFromLeft = laneEntryX < entryPoint.x;
+        laneExitX = comingFromLeft ? entryPoint.x - xDistFromLane : entryPoint.x + xDistFromLane;
+      } else {
+        // Perpendicular to side: X stays same as entry
+        laneExitX = entryPoint.x;
+      }
 
       return [
         exitPoint,
-        { x: laneEntryX, y: laneY },  // Diagonal from exit corner to lane
-        { x: laneExitX, y: laneY },   // Straight along lane
-        entryPoint                      // Diagonal from lane to entry corner
+        { x: laneEntryX, y: laneY },
+        { x: laneExitX, y: laneY },
+        entryPoint
       ];
     } else if (route.routeType === 'vertical-via-gutter') {
-      // Route through a vertical (column) gutter
+      // Route through vertical gutter to left or right
       const useLeft = route.exitSide.includes('left');
 
-      let gutterLeft, gutterRight, laneX;
+      let laneX;
       if (useLeft) {
-        // Gutter is to the left of this column
-        gutterRight = colX[sourcePlacement.col];
-        gutterLeft = gutterRight - vGutterSizes[sourcePlacement.col];
-        // Lane is laneMargin px from right edge of gutter (toward center)
+        const gutterRight = colX[sourcePlacement.col];
         laneX = gutterRight - laneMargin - laneOffset;
       } else {
-        // Gutter is to the right of this column
-        gutterLeft = colX[sourcePlacement.col] + colWidths[sourcePlacement.col];
-        gutterRight = gutterLeft + vGutterSizes[sourcePlacement.col + 1];
-        // Lane is laneMargin px from left edge of gutter (toward center)
+        const gutterLeft = colX[sourcePlacement.col] + colWidths[sourcePlacement.col];
         laneX = gutterLeft + laneMargin + laneOffset;
       }
 
-      // Point on lane where we enter
-      const laneEntryY = exitPoint.y;
-      // Point on lane where we leave
-      const laneExitY = entryPoint.y;
+      const exitIsCorner = isCorner(route.exitSide);
+      const entryIsCorner = isCorner(route.entrySide);
+
+      let laneEntryY, laneExitY;
+
+      if (exitIsCorner) {
+        // Diagonal from corner: Y changes as we go to lane X
+        const yDistToLane = Math.abs(laneX - exitPoint.x);
+        const goingDown = entryPoint.y > exitPoint.y;
+        laneEntryY = goingDown ? exitPoint.y + yDistToLane : exitPoint.y - yDistToLane;
+      } else {
+        // Perpendicular from side: Y stays same
+        laneEntryY = exitPoint.y;
+      }
+
+      if (entryIsCorner) {
+        // Diagonal to corner: Y changes as we leave the lane
+        const yDistFromLane = Math.abs(entryPoint.x - laneX);
+        const comingFromAbove = laneEntryY < entryPoint.y;
+        laneExitY = comingFromAbove ? entryPoint.y - yDistFromLane : entryPoint.y + yDistFromLane;
+      } else {
+        // Perpendicular to side: Y stays same as entry
+        laneExitY = entryPoint.y;
+      }
 
       return [
         exitPoint,
-        { x: laneX, y: laneEntryY },  // Diagonal from exit corner to lane
-        { x: laneX, y: laneExitY },   // Straight along lane
-        entryPoint                      // Diagonal from lane to entry corner
+        { x: laneX, y: laneEntryY },
+        { x: laneX, y: laneExitY },
+        entryPoint
       ];
     } else if (route.routeType === 'routed') {
-      // L-shaped or Z-shaped route through two gutters (vertical then horizontal)
+      // L-shaped route through vertical then horizontal gutter
       const goingDown = destPlacement.row > sourcePlacement.row;
       const goingRight = destPlacement.col > sourcePlacement.col;
 
-      // Vertical gutter: to the right of source col if going right, else to the left
-      let vGutterLeft, vGutterRight, vLaneX;
+      // Vertical lane position
+      let vLaneX;
       if (goingRight) {
-        vGutterLeft = colX[sourcePlacement.col] + colWidths[sourcePlacement.col];
-        vGutterRight = vGutterLeft + vGutterSizes[sourcePlacement.col + 1];
-        // Lane on left side of vertical gutter (closer to source)
-        vLaneX = vGutterLeft + laneMargin + laneOffset;
+        const gutterLeft = colX[sourcePlacement.col] + colWidths[sourcePlacement.col];
+        vLaneX = gutterLeft + laneMargin + laneOffset;
       } else {
-        vGutterRight = colX[sourcePlacement.col];
-        vGutterLeft = vGutterRight - vGutterSizes[sourcePlacement.col];
-        // Lane on right side of vertical gutter (closer to source)
-        vLaneX = vGutterRight - laneMargin - laneOffset;
+        const gutterRight = colX[sourcePlacement.col];
+        vLaneX = gutterRight - laneMargin - laneOffset;
       }
 
-      // Horizontal gutter: just before destination row
+      // Horizontal lane position
       const hGutterRow = goingDown ? destPlacement.row - 1 : destPlacement.row;
       const hGutterTop = rowY[hGutterRow] + rowHeights[hGutterRow];
       const hGutterBottom = hGutterTop + hGutterSizes[hGutterRow];
+      const hLaneY = goingDown
+        ? hGutterTop + laneMargin + laneOffset
+        : hGutterBottom - laneMargin - laneOffset;
 
-      // Lane near the top of horizontal gutter if going down, near bottom if going up
-      let hLaneY;
-      if (goingDown) {
-        hLaneY = hGutterTop + laneMargin + laneOffset;
+      const exitIsCorner = isCorner(route.exitSide);
+      const entryIsCorner = isCorner(route.entrySide);
+
+      // Entry point to vertical lane
+      let vLaneEntryY;
+      if (exitIsCorner) {
+        // Diagonal from exit corner to vertical lane
+        const yDistToVLane = Math.abs(vLaneX - exitPoint.x);
+        vLaneEntryY = goingDown ? exitPoint.y + yDistToVLane : exitPoint.y - yDistToVLane;
       } else {
-        hLaneY = hGutterBottom - laneMargin - laneOffset;
+        vLaneEntryY = exitPoint.y;
       }
 
-      // Build the path:
-      // 1. Exit point (corner of source node)
-      // 2. Diagonal to vertical lane entry point (furthest from exit corner in the intersection)
-      // 3. Straight down/up the vertical lane to the intersection with horizontal gutter
-      // 4. Diagonal across the intersection to horizontal lane
-      // 5. Straight along horizontal lane toward destination
-      // 6. Diagonal to entry point (corner of dest node)
-
-      // The "intersection" is where vLaneX meets the horizontal gutter
-      // The furthest point from exit corner in this intersection:
-      //   - For going down-right: the point at (vLaneX, hGutterTop)
-      //   - The lane diagonal goes from there to (vLaneX, hLaneY) or cuts to hLane
-
-      // Simplified lane-based path:
-      // exit -> diag to (vLaneX, exitY) -> straight to (vLaneX, hLaneY) -> straight to (entryX, hLaneY) -> diag to entry
-      // But per spec, we want diagonal entry/exit from intersections too
-
-      // Let's implement the full lane-based routing:
-      // exit corner -> diagonal to vLane -> straight on vLane -> diagonal through intersection -> straight on hLane -> diagonal to entry corner
-
-      // Entry to vertical lane (diagonal from exit corner)
-      const vLaneEntryY = exitPoint.y;
-
-      // Exit from vertical lane (at intersection with horizontal gutter)
-      // "furthest from corner" means we go to the far side of the intersection
-      const vLaneExitY = hLaneY;
-
-      // Entry to horizontal lane (same Y as vLane exit since we're turning)
-      const hLaneEntryX = vLaneX;
-
-      // Exit from horizontal lane (before turning to entry corner)
-      const hLaneExitX = entryPoint.x;
-
-      return [
-        exitPoint,
-        { x: vLaneX, y: vLaneEntryY },    // Diagonal from exit corner to vertical lane
-        { x: vLaneX, y: vLaneExitY },     // Straight down/up vertical lane
-        { x: hLaneExitX, y: hLaneY },     // Straight across horizontal lane
-        entryPoint                          // Diagonal from horizontal lane to entry corner
-      ];
+      // For the entry: if it's a corner, go diagonal directly from the lane corner (vLaneX, hLaneY)
+      // If it's a side, we need a horizontal segment first, then perpendicular
+      if (entryIsCorner) {
+        // Diagonal from lane corner directly to entry corner
+        return [
+          exitPoint,
+          { x: vLaneX, y: vLaneEntryY },    // Diagonal/perpendicular to vertical lane
+          { x: vLaneX, y: hLaneY },          // Straight along vertical lane to lane corner
+          entryPoint                          // Diagonal from lane corner to entry corner
+        ];
+      } else {
+        // Need horizontal segment, then perpendicular to side
+        return [
+          exitPoint,
+          { x: vLaneX, y: vLaneEntryY },    // Diagonal/perpendicular to vertical lane
+          { x: vLaneX, y: hLaneY },          // Straight along vertical lane to lane corner
+          { x: entryPoint.x, y: hLaneY },   // Straight along horizontal lane
+          entryPoint                          // Perpendicular to entry side
+        ];
+      }
     }
 
     return [exitPoint, entryPoint];
