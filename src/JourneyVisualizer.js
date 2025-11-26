@@ -1,6 +1,8 @@
 // src/JourneyVisualizer.js
 import dagre from 'dagre';
 import { ZoomPanController } from './ZoomPanController.js';
+import { LaneAnalyzer } from './LaneAnalyzer.js';
+import { LaneLayout } from './LaneLayout.js';
 
 export class JourneyVisualizer {
   constructor(containerSelector, options = {}) {
@@ -131,9 +133,39 @@ export class JourneyVisualizer {
   }
 
   _computeLayout() {
-    console.time('dagre-layout');
-    dagre.layout(this.graph);
-    console.timeEnd('dagre-layout');
+    // Analyze the graph for lane-compatibility
+    const analyzer = LaneAnalyzer.fromDagreGraph(this.graph);
+    const analysis = analyzer.analyze();
+
+    this.layoutAlgorithm = 'dagre'; // Default
+
+    if (analysis.isLaneCompatible) {
+      // Use lane-based layout
+      console.time('lane-layout');
+      try {
+        const laneLayout = new LaneLayout(this.graph, analysis, {
+          rankSep: this.options.layout.rankSep,
+          nodeSep: this.options.layout.nodeSep
+        });
+        laneLayout.compute();
+        laneLayout.applyToGraph();
+        this.layoutAlgorithm = 'lane';
+        this.laneAnalysis = analysis;
+        console.timeEnd('lane-layout');
+        console.log(`Lane layout: ${analysis.stats.branchCount} branches, ${analysis.stats.backEdgeCount} back-edges`);
+      } catch (error) {
+        console.warn('Lane layout failed, falling back to dagre:', error);
+        console.time('dagre-layout');
+        dagre.layout(this.graph);
+        console.timeEnd('dagre-layout');
+      }
+    } else {
+      // Use dagre for non-lane-compatible graphs
+      console.time('dagre-layout');
+      dagre.layout(this.graph);
+      console.timeEnd('dagre-layout');
+      console.log(`Dagre layout: ${analysis.stats.violationCount} lane violations detected`);
+    }
   }
 
   _positionSteps() {
