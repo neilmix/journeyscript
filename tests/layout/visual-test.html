@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JourneyLayout Visual Test</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      margin-top: 0;
+    }
+    .test-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    .test-case {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px;
+      min-width: 300px;
+    }
+    .test-case h3 {
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+    .test-case .description {
+      color: #666;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+    .grid-view {
+      position: relative;
+      background: #fafafa;
+      border: 1px solid #eee;
+      min-height: 200px;
+    }
+    .node {
+      position: absolute;
+      background: #4a90d9;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-weight: bold;
+      text-align: center;
+      min-width: 60px;
+    }
+    .node.root {
+      background: #2ecc71;
+    }
+    .grid-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+    }
+    .grid-line-v {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      border-left: 1px dashed #ddd;
+    }
+    .grid-line-h {
+      position: absolute;
+      left: 0;
+      right: 0;
+      border-top: 1px dashed #ddd;
+    }
+    .edge-svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      overflow: visible;
+    }
+    .edge-path {
+      fill: none;
+      stroke: #666;
+      stroke-width: 2;
+    }
+    .edge-path.back-ref {
+      stroke: #e74c3c;
+      stroke-dasharray: 5,3;
+    }
+    .edge-arrowhead {
+      fill: #666;
+    }
+    .edge-arrowhead.back-ref {
+      fill: #e74c3c;
+    }
+    .edge-label {
+      font-size: 10px;
+      fill: #333;
+      background: white;
+    }
+    .stats {
+      margin-top: 8px;
+      font-size: 11px;
+      color: #888;
+    }
+    .ascii-output {
+      font-family: monospace;
+      font-size: 12px;
+      background: #1a1a1a;
+      color: #0f0;
+      padding: 8px;
+      margin-top: 8px;
+      border-radius: 4px;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body>
+  <h1>JourneyLayout Visual Test</h1>
+  <p>Testing the lane-based layout algorithm for journey graphs.</p>
+
+  <div class="test-container" id="tests"></div>
+
+  <script type="module">
+    import { JourneyLayout, debugLayoutToAscii } from '../../src/JourneyLayout.js';
+
+    // Helper to create graph data
+    // Format: "A->B:label,C:label2; B->D"
+    function createGraph(description, nodeSizes = {}) {
+      const nodes = new Map();
+      const edges = [];
+      const roots = [];
+      const parts = description.split(';').map(s => s.trim()).filter(s => s);
+      const allDests = new Set();
+
+      parts.forEach(part => {
+        const [source, destsStr] = part.split('->').map(s => s.trim());
+        const dests = destsStr ? destsStr.split(',').map(s => s.trim()) : [];
+
+        if (!nodes.has(source)) {
+          nodes.set(source, nodeSizes[source] || { width: 80, height: 40 });
+        }
+
+        dests.forEach(destSpec => {
+          // Parse "Dest:label" or just "Dest"
+          const [dest, label] = destSpec.split(':').map(s => s.trim());
+
+          if (!nodes.has(dest)) {
+            nodes.set(dest, nodeSizes[dest] || { width: 80, height: 40 });
+          }
+          edges.push({ source, dest, label: label || undefined });
+          allDests.add(dest);
+        });
+      });
+
+      nodes.forEach((_, id) => {
+        if (!allDests.has(id)) {
+          roots.push(id);
+        }
+      });
+
+      if (roots.length === 0 && parts.length > 0) {
+        roots.push(parts[0].split('->')[0].trim());
+      }
+
+      return { nodes, edges, roots };
+    }
+
+    // Render a test case
+    function renderTest(container, title, description, graphDesc, nodeSizes = {}) {
+      const testCase = document.createElement('div');
+      testCase.className = 'test-case';
+
+      const h3 = document.createElement('h3');
+      h3.textContent = title;
+      testCase.appendChild(h3);
+
+      const desc = document.createElement('div');
+      desc.className = 'description';
+      desc.textContent = description;
+      testCase.appendChild(desc);
+
+      const graph = createGraph(graphDesc, nodeSizes);
+      const layout = new JourneyLayout({ rankSep: 60, nodeSep: 40 });
+      const result = layout.computeLayout(graph);
+
+      // Create grid view
+      const gridView = document.createElement('div');
+      gridView.className = 'grid-view';
+
+      // Calculate container size with padding
+      const padding = 20;
+      const width = result.bounds.width + padding * 2;
+      const height = result.bounds.height + padding * 2;
+      gridView.style.width = width + 'px';
+      gridView.style.height = height + 'px';
+
+      // Create SVG for edges (add first so nodes appear on top)
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'edge-svg');
+      svg.setAttribute('width', width);
+      svg.setAttribute('height', height);
+
+      // Add arrowhead marker
+      const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+
+      const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+      marker.setAttribute('id', 'arrowhead-' + title.replace(/\s+/g, '-'));
+      marker.setAttribute('markerWidth', '10');
+      marker.setAttribute('markerHeight', '7');
+      marker.setAttribute('refX', '9');
+      marker.setAttribute('refY', '3.5');
+      marker.setAttribute('orient', 'auto');
+      const arrowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      arrowPath.setAttribute('d', 'M0,0 L0,7 L10,3.5 z');
+      arrowPath.setAttribute('class', 'edge-arrowhead');
+      marker.appendChild(arrowPath);
+      defs.appendChild(marker);
+
+      const markerBackRef = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+      markerBackRef.setAttribute('id', 'arrowhead-backref-' + title.replace(/\s+/g, '-'));
+      markerBackRef.setAttribute('markerWidth', '10');
+      markerBackRef.setAttribute('markerHeight', '7');
+      markerBackRef.setAttribute('refX', '9');
+      markerBackRef.setAttribute('refY', '3.5');
+      markerBackRef.setAttribute('orient', 'auto');
+      const arrowPathBackRef = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      arrowPathBackRef.setAttribute('d', 'M0,0 L0,7 L10,3.5 z');
+      arrowPathBackRef.setAttribute('class', 'edge-arrowhead back-ref');
+      markerBackRef.appendChild(arrowPathBackRef);
+      defs.appendChild(markerBackRef);
+
+      svg.appendChild(defs);
+
+      // Draw edges
+      if (result.edgePaths) {
+        result.edgePaths.forEach(edge => {
+          if (edge.points.length < 2) return;
+
+          const pathData = edge.points.map((p, i) => {
+            const x = p.x + padding;
+            const y = p.y + padding;
+            return (i === 0 ? 'M' : 'L') + x + ',' + y;
+          }).join(' ');
+
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('d', pathData);
+          path.setAttribute('class', 'edge-path' + (edge.isBackRef ? ' back-ref' : ''));
+          path.setAttribute('marker-end', `url(#arrowhead-${edge.isBackRef ? 'backref-' : ''}${title.replace(/\s+/g, '-')})`);
+          svg.appendChild(path);
+
+          // Add label if present
+          if (edge.label) {
+            const midIdx = Math.floor(edge.points.length / 2);
+            const midPoint = edge.points[midIdx];
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', midPoint.x + padding);
+            text.setAttribute('y', midPoint.y + padding - 5);
+            text.setAttribute('class', 'edge-label');
+            text.setAttribute('text-anchor', 'middle');
+            text.textContent = edge.label;
+            svg.appendChild(text);
+          }
+        });
+      }
+
+      gridView.appendChild(svg);
+
+      // Add nodes
+      result.positions.forEach((pos, nodeId) => {
+        const node = document.createElement('div');
+        node.className = 'node';
+        if (graph.roots.includes(nodeId)) {
+          node.classList.add('root');
+        }
+        node.textContent = nodeId;
+        node.style.left = (pos.x + padding) + 'px';
+        node.style.top = (pos.y + padding) + 'px';
+        node.style.width = graph.nodes.get(nodeId).width + 'px';
+        node.style.height = graph.nodes.get(nodeId).height + 'px';
+        node.style.display = 'flex';
+        node.style.alignItems = 'center';
+        node.style.justifyContent = 'center';
+        gridView.appendChild(node);
+      });
+
+      testCase.appendChild(gridView);
+
+      // Stats
+      const stats = document.createElement('div');
+      stats.className = 'stats';
+      stats.textContent = `Grid: ${result.grid.rows} rows × ${result.grid.cols} cols | Bounds: ${result.bounds.width}×${result.bounds.height}`;
+      testCase.appendChild(stats);
+
+      // ASCII output
+      const ascii = document.createElement('div');
+      ascii.className = 'ascii-output';
+      ascii.textContent = debugLayoutToAscii(result, result.nodeInfo, result.placements, result.grid);
+      testCase.appendChild(ascii);
+
+      container.appendChild(testCase);
+    }
+
+    // Run tests
+    const container = document.getElementById('tests');
+
+    renderTest(container, 'Simple Chain', 'A → B → C → D', 'A->B:next; B->C:next; C->D:done');
+    renderTest(container, 'Simple Fork', 'A splits to B and C', 'A->B:yes,C:no');
+    renderTest(container, 'Diamond', 'Fork then join: A→B,C both→D', 'A->B:left,C:right; B->D:merge; C->D:merge');
+    renderTest(container, 'Three Children', 'A has three children', 'A->B:opt1,C:opt2,D:opt3');
+    renderTest(container, 'Nested Lanes', 'A→B,C each with 2 children', 'A->B:path1,C:path2; B->D,E; C->F,G');
+    renderTest(container, 'Asymmetric', 'B has 3 children, C has 1', 'A->B,C; B->D,E,F; C->G');
+    renderTest(container, 'Deep Lanes', 'Two parallel chains', 'A->B:left,C:right; B->D; C->E; D->F; E->G');
+    renderTest(container, 'Multiple Roots', 'Two separate trees', 'A->B; C->D');
+    renderTest(container, 'Cycle', 'A→B→C→A (back-reference)', 'A->B:next; B->C:next; C->A:retry');
+    renderTest(container, 'Wide Tree', 'Root with 5 children', 'A->B,C,D,E,F');
+
+    // More complex example - checkout flow
+    renderTest(
+      container,
+      'Checkout Flow',
+      'E-commerce checkout with error handling',
+      'Start->Auth:login; Auth->Cart:success,Error:fail; Cart->Payment:checkout; Payment->Confirm:success,Error:fail; Error->Start:retry'
+    );
+
+    // Routed edges example
+    renderTest(
+      container,
+      'Skip Ahead',
+      'Edge that skips multiple ranks',
+      'A->B:step1; B->C:step2; C->D:step3; A->D:skip'
+    );
+  </script>
+</body>
+</html>
