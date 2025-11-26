@@ -915,19 +915,18 @@ body {
     }
 
     /**
-     * Calculate x positions using per-rank compaction.
+     * Calculate x positions using per-rank compaction with centered children.
      *
-     * Key insight: When placing a child, we only need to avoid overlap
-     * at ranks where BOTH the child's subtree AND previous siblings' subtrees
-     * have nodes. For leaf nodes (no children), this means only checking
-     * the leaf's own rank, allowing them to be placed compactly.
+     * Key insights:
+     * 1. When placing siblings, only check overlap at ranks where BOTH subtrees have nodes
+     * 2. After positioning siblings, center them under their parent (inverse tree style)
+     * 3. Track both left AND right edges to properly center based on full subtree bounds
      */
     calculateXPositions() {
       const { startId } = this.analysis;
       const { marginX, nodeSep } = this.options;
 
       // First pass: calculate subtree depth ranges for each node
-      // This tells us which ranks each subtree spans
       const subtreeRanges = new Map(); // nodeId -> { minRank, maxRank }
 
       const calculateRanges = (nodeId) => {
@@ -950,8 +949,29 @@ body {
 
       calculateRanges(startId);
 
-      // Second pass: calculate positions using per-rank extent
-      // For each subtree, track the rightmost x at each rank
+      // Helper to shift all nodes in a subtree by offset
+      const shiftSubtree = (nodeId, offset) => {
+        const pos = this.nodePositions.get(nodeId);
+        if (pos && pos.x !== undefined) {
+          pos.x += offset;
+        }
+        const children = this.children.get(nodeId) || [];
+        for (const childId of children) {
+          shiftSubtree(childId, offset);
+        }
+      };
+
+      // Helper to shift an extent map by offset (now tracks {minX, maxX})
+      const shiftExtent = (extent, offset) => {
+        const newExtent = new Map();
+        for (const [r, bounds] of extent) {
+          newExtent.set(r, { minX: bounds.minX + offset, maxX: bounds.maxX + offset });
+        }
+        return newExtent;
+      };
+
+      // Second pass: calculate positions using per-rank extent with centering
+      // Extent now maps rank -> { minX, maxX } to track full subtree bounds
       const calculateSubtreeExtent = (nodeId, leftX) => {
         const pos = this.nodePositions.get(nodeId);
         if (!pos) return new Map();
@@ -960,22 +980,22 @@ body {
         const width = pos.width;
         const children = this.children.get(nodeId) || [];
 
-        // This node's center x and right edge
+        // Position this node temporarily (will adjust after centering children)
         const nodeX = leftX + width / 2;
         pos.x = nodeX;
         const rightX = leftX + width;
 
-        // Track the rightmost edge at each rank in this subtree
+        // Track both left and right edges at each rank in this subtree
         const extent = new Map();
-        extent.set(rank, rightX);
+        extent.set(rank, { minX: leftX, maxX: rightX });
 
         if (children.length === 0) {
-          // Leaf node - extent is just this node
           return extent;
         }
 
-        // Process children left-to-right
-        let childLeftX = leftX; // First child aligns with parent's left edge
+        // Collect child extents as we position them
+        const childExtents = [];
+        let childLeftX = leftX; // First child starts at parent's left edge
 
         for (let i = 0; i < children.length; i++) {
           const childId = children[i];
@@ -985,40 +1005,93 @@ body {
           const childRange = subtreeRanges.get(childId);
 
           // For subsequent children, find minimum x that avoids overlap
-          // Only check ranks that BOTH this child's subtree AND previous siblings span
+          let requiredMinX = leftX;
           if (i > 0 && childRange) {
             let maxExtent = leftX;
 
             for (let j = 0; j < i; j++) {
               const prevChildId = children[j];
-              const prevExtent = this.subtreeExtents.get(prevChildId);
+              const prevExtent = childExtents[j];
               const prevRange = subtreeRanges.get(prevChildId);
 
               if (prevExtent && prevRange) {
-                // Find overlapping rank range
                 const overlapMin = Math.max(childRange.minRank, prevRange.minRank);
                 const overlapMax = Math.min(childRange.maxRank, prevRange.maxRank);
 
-                // Check extent at each overlapping rank
                 for (let r = overlapMin; r <= overlapMax; r++) {
                   if (prevExtent.has(r)) {
-                    maxExtent = Math.max(maxExtent, prevExtent.get(r));
+                    maxExtent = Math.max(maxExtent, prevExtent.get(r).maxX);
                   }
                 }
               }
             }
 
             childLeftX = maxExtent + nodeSep;
+            requiredMinX = childLeftX;
           }
 
           // Recursively calculate child's subtree extent
-          const childExtent = calculateSubtreeExtent(childId, childLeftX);
-          this.subtreeExtents.set(childId, childExtent);
+          let childExtent = calculateSubtreeExtent(childId, childLeftX);
 
-          // Merge child extent into this node's extent
-          for (const [r, x] of childExtent) {
-            const currentMax = extent.get(r) || 0;
-            extent.set(r, Math.max(currentMax, x));
+          // After centering within the subtree, check if any nodes ended up
+          // to the left of requiredMinX. If so, shift the entire subtree right.
+          let subtreeMinX = Infinity;
+          for (const [, bounds] of childExtent) {
+            subtreeMinX = Math.min(subtreeMinX, bounds.minX);
+          }
+
+          if (subtreeMinX < requiredMinX) {
+            const correctionOffset = requiredMinX - subtreeMinX;
+            shiftSubtree(childId, correctionOffset);
+            childExtent = shiftExtent(childExtent, correctionOffset);
+          }
+
+          childExtents.push(childExtent);
+          this.subtreeExtents.set(childId, childExtent);
+        }
+
+        // Now center all children under this node
+        // Find the bounding box using FULL SUBTREE extents, not just direct children
+        let minChildX = Infinity, maxChildX = -Infinity;
+        for (const childExtent of childExtents) {
+          for (const [, bounds] of childExtent) {
+            minChildX = Math.min(minChildX, bounds.minX);
+            maxChildX = Math.max(maxChildX, bounds.maxX);
+          }
+        }
+
+        if (minChildX !== Infinity) {
+          const childrenCenter = (minChildX + maxChildX) / 2;
+          const offset = nodeX - childrenCenter;
+
+          if (Math.abs(offset) > 0.5) {
+            // Shift all children and their descendants
+            for (let i = 0; i < children.length; i++) {
+              const childId = children[i];
+              shiftSubtree(childId, offset);
+
+              // Update extent with offset
+              const newExtent = shiftExtent(childExtents[i], offset);
+              childExtents[i] = newExtent;
+              this.subtreeExtents.set(childId, newExtent);
+            }
+          }
+        }
+
+        // Merge all child extents into this node's extent
+        extent.clear();
+        extent.set(rank, { minX: leftX, maxX: rightX });
+        for (const childExtent of childExtents) {
+          for (const [r, bounds] of childExtent) {
+            if (extent.has(r)) {
+              const existing = extent.get(r);
+              extent.set(r, {
+                minX: Math.min(existing.minX, bounds.minX),
+                maxX: Math.max(existing.maxX, bounds.maxX)
+              });
+            } else {
+              extent.set(r, { minX: bounds.minX, maxX: bounds.maxX });
+            }
           }
         }
 
@@ -1031,6 +1104,22 @@ body {
       // Calculate positions starting from root
       const rootExtent = calculateSubtreeExtent(startId, marginX);
       this.subtreeExtents.set(startId, rootExtent);
+
+      // Ensure nothing is to the left of marginX
+      let minX = Infinity;
+      for (const [, pos] of this.nodePositions) {
+        if (pos.x !== undefined) {
+          minX = Math.min(minX, pos.x - pos.width / 2);
+        }
+      }
+      if (minX < marginX) {
+        const shiftAmount = marginX - minX;
+        for (const [, pos] of this.nodePositions) {
+          if (pos.x !== undefined) {
+            pos.x += shiftAmount;
+          }
+        }
+      }
     }
 
     /**
