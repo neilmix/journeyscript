@@ -1129,24 +1129,24 @@ body {
       const { backEdges } = this.analysis;
       const backEdgeSet = new Set(backEdges.map(e => `${e.from}->${e.to}`));
 
+      // First, route all normal (forward) edges
       this.graph.edges().forEach(edgeObj => {
         const from = edgeObj.v;
         const to = edgeObj.w;
         const edgeKey = `${from}->${to}`;
+
+        if (backEdgeSet.has(edgeKey)) return; // Skip back-edges for now
 
         const fromPos = this.nodePositions.get(from);
         const toPos = this.nodePositions.get(to);
 
         if (!fromPos || !toPos) return;
 
-        const isBackEdge = backEdgeSet.has(edgeKey);
-
-        if (isBackEdge) {
-          this.routeBackEdge(from, to, fromPos, toPos, edgeKey);
-        } else {
-          this.routeNormalEdge(from, to, fromPos, toPos, edgeKey);
-        }
+        this.routeNormalEdge(from, to, fromPos, toPos, edgeKey);
       });
+
+      // Then, route all back-edges with channel-based collision avoidance
+      this.routeAllBackEdges(backEdges);
     }
 
     /**
@@ -1179,33 +1179,377 @@ body {
     }
 
     /**
-     * Route a back-edge (cycle) around the outside
+     * Compute the bounding box of nodes at each rank level
      */
-    routeBackEdge(from, to, fromPos, toPos, edgeKey) {
+    computeRankBounds() {
+      const rankBounds = new Map(); // rank -> { minX, maxX, minY, maxY }
+
+      for (const [, pos] of this.nodePositions) {
+        if (pos.rank === undefined) continue;
+
+        const left = pos.x - pos.width / 2;
+        const right = pos.x + pos.width / 2;
+        const top = pos.y - pos.height / 2;
+        const bottom = pos.y + pos.height / 2;
+
+        if (!rankBounds.has(pos.rank)) {
+          rankBounds.set(pos.rank, { minX: left, maxX: right, minY: top, maxY: bottom });
+        } else {
+          const bounds = rankBounds.get(pos.rank);
+          bounds.minX = Math.min(bounds.minX, left);
+          bounds.maxX = Math.max(bounds.maxX, right);
+          bounds.minY = Math.min(bounds.minY, top);
+          bounds.maxY = Math.max(bounds.maxY, bottom);
+        }
+      }
+
+      return rankBounds;
+    }
+
+    /**
+     * Route all back-edges using channel-based routing with collision avoidance
+     *
+     * Goals (in priority order):
+     * 1. Back-edges never overlap node content (vertical AND horizontal segments)
+     * 2. Edges don't overlap each other (minimum 20px spacing)
+     * 3. Minimize visual complexity
+     */
+    routeAllBackEdges(backEdges) {
+      if (backEdges.length === 0) return;
+
       const { backEdgeOffset } = this.options;
+      const edgeSpacing = 20; // Minimum spacing between parallel edges
 
-      // Determine which side to route around (right side)
-      const maxX = Math.max(...[...this.nodePositions.values()].map(p => p.x + p.width / 2));
-      const routeX = maxX + backEdgeOffset;
+      // Compute bounds at each rank level
+      const rankBounds = this.computeRankBounds();
 
-      const fromRight = fromPos.x + fromPos.width / 2;
+      // Prepare edge routing info
+      const edgesToRoute = backEdges.map(e => {
+        const fromPos = this.nodePositions.get(e.from);
+        const toPos = this.nodePositions.get(e.to);
+
+        if (!fromPos || !toPos) return null;
+
+        const minRank = Math.min(fromPos.rank, toPos.rank);
+        const maxRank = Math.max(fromPos.rank, toPos.rank);
+
+        // Find the content bounds for the ranks this edge spans
+        let spanMinX = Infinity, spanMaxX = -Infinity;
+        for (let r = minRank; r <= maxRank; r++) {
+          const bounds = rankBounds.get(r);
+          if (bounds) {
+            spanMinX = Math.min(spanMinX, bounds.minX);
+            spanMaxX = Math.max(spanMaxX, bounds.maxX);
+          }
+        }
+
+        return {
+          from: e.from,
+          to: e.to,
+          fromPos,
+          toPos,
+          minRank,
+          maxRank,
+          spanMinX,
+          spanMaxX,
+          verticalSpan: maxRank - minRank
+        };
+      }).filter(e => e !== null);
+
+      // Sort edges: shorter vertical spans first (they can be routed closer)
+      edgesToRoute.sort((a, b) => a.verticalSpan - b.verticalSpan);
+
+      // Track used channels: { x: number, minRank: number, maxRank: number }[]
+      const leftChannels = [];
+      const rightChannels = [];
+
+      // Route each edge, choosing the best side based on obstacle analysis
+      for (const edge of edgesToRoute) {
+        const { side, channelX } = this.findBestRouteForBackEdge(
+          edge, leftChannels, rightChannels, rankBounds, backEdgeOffset, edgeSpacing
+        );
+
+        if (side === 'left') {
+          leftChannels.push({ x: channelX, minRank: edge.minRank, maxRank: edge.maxRank });
+        } else {
+          rightChannels.push({ x: channelX, minRank: edge.minRank, maxRank: edge.maxRank });
+        }
+
+        this.createBackEdgePath(edge, channelX, side);
+      }
+    }
+
+    /**
+     * Find the best route (side and channel) for a back-edge, considering
+     * both vertical channel placement and horizontal segment obstacles
+     */
+    findBestRouteForBackEdge(edge, leftChannels, rightChannels, rankBounds, baseOffset, spacing) {
+      const { fromPos, toPos, from, to } = edge;
+
+      // Calculate potential channel positions for each side
+      const leftChannelX = this.findAvailableChannel(
+        edge, leftChannels, 'left', rankBounds, baseOffset, spacing
+      );
+      const rightChannelX = this.findAvailableChannel(
+        edge, rightChannels, 'right', rankBounds, baseOffset, spacing
+      );
+
+      // Check horizontal segment crossings for left routing
+      const leftFromEdgeX = fromPos.x - fromPos.width / 2;
+      const leftToEdgeX = toPos.x - toPos.width / 2;
+      const leftCrossingsFrom = this.getHorizontalSegmentObstacles(
+        fromPos.rank, leftFromEdgeX, leftChannelX, from, to
+      );
+      const leftCrossingsTo = this.getHorizontalSegmentObstacles(
+        toPos.rank, leftToEdgeX, leftChannelX, from, to
+      );
+      const leftHasCrossings = leftCrossingsFrom.length > 0 || leftCrossingsTo.length > 0;
+
+      // Check horizontal segment crossings for right routing
+      const rightFromEdgeX = fromPos.x + fromPos.width / 2;
+      const rightToEdgeX = toPos.x + toPos.width / 2;
+      const rightCrossingsFrom = this.getHorizontalSegmentObstacles(
+        fromPos.rank, rightFromEdgeX, rightChannelX, from, to
+      );
+      const rightCrossingsTo = this.getHorizontalSegmentObstacles(
+        toPos.rank, rightToEdgeX, rightChannelX, from, to
+      );
+      const rightHasCrossings = rightCrossingsFrom.length > 0 || rightCrossingsTo.length > 0;
+
+      // Determine preferred side based on endpoint positions
+      const avgX = (fromPos.x + toPos.x) / 2;
+      const midX = (edge.spanMinX + edge.spanMaxX) / 2;
+      const preferLeft = avgX < midX;
+
+      // Choose the best side
+      let side, channelX;
+
+      if (!leftHasCrossings && !rightHasCrossings) {
+        // Neither side has crossings - use preferred side
+        side = preferLeft ? 'left' : 'right';
+        channelX = preferLeft ? leftChannelX : rightChannelX;
+      } else if (!leftHasCrossings) {
+        // Only left is clear
+        side = 'left';
+        channelX = leftChannelX;
+      } else if (!rightHasCrossings) {
+        // Only right is clear
+        side = 'right';
+        channelX = rightChannelX;
+      } else {
+        // Both sides have crossings - need to route around obstacles
+        // Choose the side with fewer/smaller obstacles and route further out
+        const leftObstacles = [...leftCrossingsFrom, ...leftCrossingsTo];
+        const rightObstacles = [...rightCrossingsFrom, ...rightCrossingsTo];
+
+        if (leftObstacles.length <= rightObstacles.length) {
+          side = 'left';
+          // Find the leftmost obstacle and route to the left of it
+          const minObstacleX = Math.min(...leftObstacles.map(o => o.left));
+          channelX = Math.min(leftChannelX, minObstacleX - baseOffset);
+        } else {
+          side = 'right';
+          // Find the rightmost obstacle and route to the right of it
+          const maxObstacleX = Math.max(...rightObstacles.map(o => o.right));
+          channelX = Math.max(rightChannelX, maxObstacleX + baseOffset);
+        }
+
+        // Re-check for channel conflicts with the new position
+        const channels = side === 'left' ? leftChannels : rightChannels;
+        channelX = this.adjustChannelForConflicts(channelX, edge, channels, side, spacing);
+      }
+
+      return { side, channelX };
+    }
+
+    /**
+     * Get obstacles (nodes) that a horizontal segment would cross
+     */
+    getHorizontalSegmentObstacles(rank, fromX, toX, excludeFrom, excludeTo) {
+      const obstacles = [];
+      const minX = Math.min(fromX, toX);
+      const maxX = Math.max(fromX, toX);
+
+      for (const [nodeId, pos] of this.nodePositions) {
+        // Skip source and target nodes
+        if (nodeId === excludeFrom || nodeId === excludeTo) continue;
+
+        // Only check nodes at the same rank
+        if (pos.rank !== rank) continue;
+
+        const nodeLeft = pos.x - pos.width / 2;
+        const nodeRight = pos.x + pos.width / 2;
+
+        // Check if the horizontal segment crosses this node
+        // Segment goes from minX to maxX at this rank's Y level
+        if (nodeRight > minX && nodeLeft < maxX) {
+          obstacles.push({
+            nodeId,
+            left: nodeLeft,
+            right: nodeRight
+          });
+        }
+      }
+
+      return obstacles;
+    }
+
+    /**
+     * Find an available routing channel that doesn't conflict with existing edges
+     * and stays clear of all node content in the vertical span
+     */
+    findAvailableChannel(edge, usedChannels, side, rankBounds, baseOffset, spacing) {
+      // Find the content boundary for this edge's span
+      let contentEdge;
+      if (side === 'left') {
+        contentEdge = edge.spanMinX;
+      } else {
+        contentEdge = edge.spanMaxX;
+      }
+
+      // Start from base offset outside content
+      let channelX = side === 'left'
+        ? contentEdge - baseOffset
+        : contentEdge + baseOffset;
+
+      return this.adjustChannelForConflicts(channelX, edge, usedChannels, side, spacing);
+    }
+
+    /**
+     * Adjust a channel position to avoid conflicts with existing channels
+     */
+    adjustChannelForConflicts(channelX, edge, usedChannels, side, spacing) {
+      let hasConflict = true;
+      let iterations = 0;
+      const maxIterations = 100;
+
+      while (hasConflict && iterations < maxIterations) {
+        hasConflict = false;
+        iterations++;
+
+        for (const used of usedChannels) {
+          // Check if rank ranges overlap
+          const rangesOverlap = edge.minRank <= used.maxRank && edge.maxRank >= used.minRank;
+
+          if (rangesOverlap) {
+            const distance = Math.abs(channelX - used.x);
+            if (distance < spacing) {
+              hasConflict = true;
+              channelX = side === 'left'
+                ? Math.min(channelX, used.x) - spacing
+                : Math.max(channelX, used.x) + spacing;
+              break;
+            }
+          }
+        }
+      }
+
+      return channelX;
+    }
+
+    /**
+     * Create the path for a back-edge routed through a specific channel,
+     * adding bend points to avoid obstacles in horizontal segments
+     */
+    createBackEdgePath(edge, channelX, side) {
+      const { fromPos, toPos, from, to } = edge;
+      const edgeKey = `${from}->${to}`;
+
+      // Determine connection points on the nodes
+      let fromEdgeX, toEdgeX;
+      if (side === 'left') {
+        fromEdgeX = fromPos.x - fromPos.width / 2;
+        toEdgeX = toPos.x - toPos.width / 2;
+      } else {
+        fromEdgeX = fromPos.x + fromPos.width / 2;
+        toEdgeX = toPos.x + toPos.width / 2;
+      }
+
       const fromY = fromPos.y;
-      const toRight = toPos.x + toPos.width / 2;
       const toY = toPos.y;
 
-      // Route: right from source, up/down along the side, left to target
-      const points = [
-        { x: fromRight, y: fromY },
-        { x: routeX, y: fromY },
-        { x: routeX, y: toY },
-        { x: toRight, y: toY }
-      ];
+      // Check for obstacles in horizontal segments
+      const fromObstacles = this.getHorizontalSegmentObstacles(fromPos.rank, fromEdgeX, channelX, from, to);
+      const toObstacles = this.getHorizontalSegmentObstacles(toPos.rank, toEdgeX, channelX, from, to);
+
+      // Build path with obstacle avoidance
+      const points = [];
+
+      // Start from source
+      points.push({ x: fromEdgeX, y: fromY });
+
+      // Handle obstacles at source rank
+      if (fromObstacles.length > 0) {
+        // Find a safe Y to route around obstacles (go to edge of source node first)
+        const safeFromY = this.findSafeYForHorizontal(fromPos.rank, channelX, fromEdgeX, from, to, fromY);
+        if (safeFromY !== fromY) {
+          points.push({ x: fromEdgeX, y: safeFromY });
+          points.push({ x: channelX, y: safeFromY });
+        } else {
+          points.push({ x: channelX, y: fromY });
+        }
+      } else {
+        points.push({ x: channelX, y: fromY });
+      }
+
+      // Handle obstacles at target rank
+      if (toObstacles.length > 0) {
+        // Find a safe Y to route around obstacles
+        const safeToY = this.findSafeYForHorizontal(toPos.rank, channelX, toEdgeX, from, to, toY);
+        if (safeToY !== toY) {
+          points.push({ x: channelX, y: safeToY });
+          points.push({ x: toEdgeX, y: safeToY });
+          points.push({ x: toEdgeX, y: toY });
+        } else {
+          points.push({ x: channelX, y: toY });
+          points.push({ x: toEdgeX, y: toY });
+        }
+      } else {
+        points.push({ x: channelX, y: toY });
+        points.push({ x: toEdgeX, y: toY });
+      }
 
       this.edgePaths.set(edgeKey, {
         points,
         isBackEdge: true,
+        routingSide: side,
+        channelX,
         label: this.graph.edge({ v: from, w: to })?.label
       });
+    }
+
+    /**
+     * Find a safe Y coordinate for a horizontal segment that avoids obstacles
+     * Returns a Y above (or below) all obstacles at the given rank
+     */
+    findSafeYForHorizontal(rank, fromX, toX, excludeFrom, excludeTo, defaultY) {
+      const minX = Math.min(fromX, toX);
+      const maxX = Math.max(fromX, toX);
+
+      // Find all obstacles in the horizontal path
+      let minObstacleTop = Infinity;
+
+      for (const [nodeId, pos] of this.nodePositions) {
+        if (nodeId === excludeFrom || nodeId === excludeTo) continue;
+        if (pos.rank !== rank) continue;
+
+        const nodeLeft = pos.x - pos.width / 2;
+        const nodeRight = pos.x + pos.width / 2;
+
+        if (nodeRight > minX && nodeLeft < maxX) {
+          const nodeTop = pos.y - pos.height / 2;
+          pos.y + pos.height / 2;
+          minObstacleTop = Math.min(minObstacleTop, nodeTop);
+        }
+      }
+
+      if (minObstacleTop === Infinity) {
+        return defaultY; // No obstacles
+      }
+
+      // Route above obstacles (with some margin)
+      const margin = 20;
+      return minObstacleTop - margin;
     }
 
     /**
@@ -1215,6 +1559,7 @@ body {
       let minX = Infinity, minY = Infinity;
       let maxX = -Infinity, maxY = -Infinity;
 
+      // Account for node positions
       for (const [nodeId, pos] of this.nodePositions) {
         if (pos.x === undefined || pos.y === undefined) continue;
 
@@ -1229,15 +1574,22 @@ body {
         maxY = Math.max(maxY, bottom);
       }
 
-      // Account for back-edge routing
-      const backEdgeMaxX = maxX + this.options.backEdgeOffset;
+      // Account for back-edge routing (now can go left or right)
+      for (const [, pathData] of this.edgePaths) {
+        if (pathData.isBackEdge && pathData.points) {
+          for (const point of pathData.points) {
+            minX = Math.min(minX, point.x);
+            maxX = Math.max(maxX, point.x);
+          }
+        }
+      }
 
       return {
         minX: minX - this.options.marginX,
         minY: minY - this.options.marginY,
-        maxX: Math.max(maxX, backEdgeMaxX) + this.options.marginX,
+        maxX: maxX + this.options.marginX,
         maxY: maxY + this.options.marginY,
-        width: Math.max(maxX, backEdgeMaxX) - minX + this.options.marginX * 2,
+        width: maxX - minX + this.options.marginX * 2,
         height: maxY - minY + this.options.marginY * 2
       };
     }

@@ -368,4 +368,464 @@ describe('LaneLayout', () => {
       expect(edge.points.length).toBeGreaterThanOrEqual(2);
     });
   });
+
+  describe('back-edge routing - no content overlap', () => {
+    // Helper to check if a line segment intersects a rectangle
+    function lineIntersectsRect(x1, y1, x2, y2, rect) {
+      const { left, right, top, bottom } = rect;
+
+      // Check if line is completely outside rect bounds
+      if (Math.max(x1, x2) < left || Math.min(x1, x2) > right) return false;
+      if (Math.max(y1, y2) < top || Math.min(y1, y2) > bottom) return false;
+
+      // For horizontal lines (y1 === y2)
+      if (Math.abs(y1 - y2) < 0.1) {
+        return y1 >= top && y1 <= bottom &&
+               Math.max(x1, x2) >= left && Math.min(x1, x2) <= right;
+      }
+
+      // For vertical lines (x1 === x2)
+      if (Math.abs(x1 - x2) < 0.1) {
+        return x1 >= left && x1 <= right &&
+               Math.max(y1, y2) >= top && Math.min(y1, y2) <= bottom;
+      }
+
+      // For diagonal lines, check intersection with each edge
+      // (simplified - our back-edges are orthogonal so this shouldn't be needed)
+      return false;
+    }
+
+    // Helper to check if a back-edge path intersects any node
+    function backEdgeIntersectsNodes(edgePath, nodePositions, sourceId, targetId) {
+      const points = edgePath.points;
+      const intersections = [];
+
+      for (const [nodeId, pos] of nodePositions) {
+        // Skip source and target nodes - edges are supposed to connect to them
+        if (nodeId === sourceId || nodeId === targetId) continue;
+
+        const rect = {
+          left: pos.x - pos.width / 2,
+          right: pos.x + pos.width / 2,
+          top: pos.y - pos.height / 2,
+          bottom: pos.y + pos.height / 2
+        };
+
+        // Check each segment of the path
+        for (let i = 0; i < points.length - 1; i++) {
+          const p1 = points[i];
+          const p2 = points[i + 1];
+
+          if (lineIntersectsRect(p1.x, p1.y, p2.x, p2.y, rect)) {
+            intersections.push({
+              nodeId,
+              segment: i,
+              from: p1,
+              to: p2,
+              nodeRect: rect
+            });
+          }
+        }
+      }
+
+      return intersections;
+    }
+
+    it('should not cross nodes at the source rank (horizontal segment)', () => {
+      // Layout:
+      //   a (wide)    b (source of back-edge)
+      //               |
+      //               c (target of back-edge)
+      //
+      // Back-edge b->c should not cross node 'a' when routing left
+      const { graph, analysis } = createGraphAndAnalysis(
+        {
+          root: { width: 100, height: 50 },
+          a: { width: 200, height: 50 },  // Wide node on the left
+          b: { width: 100, height: 50 },  // Back-edge source
+          c: { width: 100, height: 50 }   // Back-edge target (child of b)
+        },
+        [
+          ['root', 'a'],
+          ['root', 'b'],
+          ['b', 'c'],
+          ['c', 'b']  // Back-edge from c to b
+        ]
+      );
+
+      const layout = new LaneLayout(graph, analysis, {
+        backEdgeOffset: 30,
+        nodeSep: 80
+      });
+      layout.compute();
+
+      const backEdge = layout.edgePaths.get('c->b');
+      expect(backEdge).toBeDefined();
+      expect(backEdge.isBackEdge).toBe(true);
+
+      const intersections = backEdgeIntersectsNodes(
+        backEdge,
+        layout.nodePositions,
+        'c',
+        'b'
+      );
+
+      expect(intersections).toHaveLength(0);
+    });
+
+    it('should not cross nodes at intermediate ranks', () => {
+      // Layout:
+      //       root
+      //      /    \
+      //     a      b
+      //     |      |
+      //     c      d
+      //     |      |
+      //     e      f
+      //            |
+      //            g -> back to b
+      //
+      // Back-edge g->b should not cross nodes c, e on the left branch
+      const { graph, analysis } = createGraphAndAnalysis(
+        {
+          root: { width: 100, height: 50 },
+          a: { width: 150, height: 50 },
+          b: { width: 100, height: 50 },
+          c: { width: 150, height: 50 },
+          d: { width: 100, height: 50 },
+          e: { width: 150, height: 50 },
+          f: { width: 100, height: 50 },
+          g: { width: 100, height: 50 }
+        },
+        [
+          ['root', 'a'],
+          ['root', 'b'],
+          ['a', 'c'],
+          ['b', 'd'],
+          ['c', 'e'],
+          ['d', 'f'],
+          ['f', 'g'],
+          ['g', 'b']  // Back-edge from g to b
+        ]
+      );
+
+      const layout = new LaneLayout(graph, analysis, {
+        backEdgeOffset: 30,
+        nodeSep: 80
+      });
+      layout.compute();
+
+      const backEdge = layout.edgePaths.get('g->b');
+      expect(backEdge).toBeDefined();
+      expect(backEdge.isBackEdge).toBe(true);
+
+      const intersections = backEdgeIntersectsNodes(
+        backEdge,
+        layout.nodePositions,
+        'g',
+        'b'
+      );
+
+      expect(intersections).toHaveLength(0);
+    });
+
+    it('should not cross wide nodes when routing on the left side', () => {
+      // Layout where back-edge wants to route left but there's a wide node:
+      //      root
+      //     /    \
+      //  wide     src
+      //           |
+      //          tgt -> back to src
+      //
+      // The wide node might extend into the left routing channel
+      const { graph, analysis } = createGraphAndAnalysis(
+        {
+          root: { width: 100, height: 50 },
+          wide: { width: 400, height: 50 },  // Very wide node
+          src: { width: 100, height: 50 },
+          tgt: { width: 100, height: 50 }
+        },
+        [
+          ['root', 'wide'],
+          ['root', 'src'],
+          ['src', 'tgt'],
+          ['tgt', 'src']  // Back-edge
+        ]
+      );
+
+      const layout = new LaneLayout(graph, analysis, {
+        backEdgeOffset: 30,
+        nodeSep: 80
+      });
+      layout.compute();
+
+      const backEdge = layout.edgePaths.get('tgt->src');
+      expect(backEdge).toBeDefined();
+
+      const intersections = backEdgeIntersectsNodes(
+        backEdge,
+        layout.nodePositions,
+        'tgt',
+        'src'
+      );
+
+      expect(intersections).toHaveLength(0);
+    });
+
+    it('should maintain minimum spacing between parallel back-edges', () => {
+      // Two back-edges that would route on the same side
+      //     root
+      //    / | \
+      //   a  b  c
+      //   |  |  |
+      //   d  e  f
+      //   |     |
+      //   g     h
+      //   |
+      //   i -> back to a
+      //   |
+      //   j -> back to d
+      //
+      // Both back-edges route on the left, should have 20px spacing
+      const { graph, analysis } = createGraphAndAnalysis(
+        {
+          root: { width: 100, height: 50 },
+          a: { width: 100, height: 50 },
+          b: { width: 100, height: 50 },
+          c: { width: 100, height: 50 },
+          d: { width: 100, height: 50 },
+          e: { width: 100, height: 50 },
+          f: { width: 100, height: 50 },
+          g: { width: 100, height: 50 },
+          h: { width: 100, height: 50 },
+          i: { width: 100, height: 50 },
+          j: { width: 100, height: 50 }
+        },
+        [
+          ['root', 'a'], ['root', 'b'], ['root', 'c'],
+          ['a', 'd'], ['b', 'e'], ['c', 'f'],
+          ['d', 'g'], ['f', 'h'],
+          ['g', 'i'],
+          ['i', 'a'],  // Back-edge 1: i -> a
+          ['i', 'j'],
+          ['j', 'd']   // Back-edge 2: j -> d
+        ]
+      );
+
+      const layout = new LaneLayout(graph, analysis, {
+        backEdgeOffset: 30,
+        nodeSep: 80
+      });
+      layout.compute();
+
+      const backEdge1 = layout.edgePaths.get('i->a');
+      const backEdge2 = layout.edgePaths.get('j->d');
+
+      expect(backEdge1).toBeDefined();
+      expect(backEdge2).toBeDefined();
+
+      // Both should be back-edges
+      expect(backEdge1.isBackEdge).toBe(true);
+      expect(backEdge2.isBackEdge).toBe(true);
+
+      // If they're on the same side, their channels should be at least 20px apart
+      if (backEdge1.routingSide === backEdge2.routingSide) {
+        const spacing = Math.abs(backEdge1.channelX - backEdge2.channelX);
+        expect(spacing).toBeGreaterThanOrEqual(20);
+      }
+    });
+
+    it('should route back-edge on the correct side based on endpoint positions', () => {
+      // When source and destination are on the left side of the graph,
+      // the back-edge should route on the left, not the right
+      //        root
+      //       /    \
+      //      a      b (many descendants)
+      //      |
+      //      c -> back to a
+      //
+      // a and c are on the left, back-edge should go left
+      const { graph, analysis } = createGraphAndAnalysis(
+        {
+          root: { width: 100, height: 50 },
+          a: { width: 100, height: 50 },
+          b: { width: 100, height: 50 },
+          b1: { width: 100, height: 50 },
+          b2: { width: 100, height: 50 },
+          b3: { width: 100, height: 50 },
+          c: { width: 100, height: 50 }
+        },
+        [
+          ['root', 'a'],
+          ['root', 'b'],
+          ['a', 'c'],
+          ['b', 'b1'],
+          ['b', 'b2'],
+          ['b', 'b3'],
+          ['c', 'a']  // Back-edge
+        ]
+      );
+
+      const layout = new LaneLayout(graph, analysis, {
+        backEdgeOffset: 30,
+        nodeSep: 80
+      });
+      layout.compute();
+
+      const backEdge = layout.edgePaths.get('c->a');
+      const posA = layout.nodePositions.get('a');
+      const posC = layout.nodePositions.get('c');
+
+      // Since a and c are on the left branch, the back-edge should route left
+      // The channel X should be less than both a and c's left edges
+      const minLeftEdge = Math.min(
+        posA.x - posA.width / 2,
+        posC.x - posC.width / 2
+      );
+
+      // The routing channel should be on the left
+      expect(backEdge.channelX).toBeLessThan(minLeftEdge);
+    });
+
+    it('should not cross sibling node when horizontal segment goes to channel', () => {
+      // This tests the specific case where the horizontal segment from
+      // the back-edge source crosses a sibling node at the same rank.
+      //
+      // Layout:
+      //         root
+      //        /    \
+      //       a      b
+      //       |     /|\
+      //       |    c d e    <- c, d, e are siblings at same rank
+      //       |      |
+      //       |      f
+      //       |      |
+      //       g      h -> back to b
+      //
+      // When h routes back to b, if it routes on the right side,
+      // the horizontal segment at h's rank might cross g.
+      // If it routes on the left, the horizontal segment at b's rank
+      // might cross a.
+      const { graph, analysis } = createGraphAndAnalysis(
+        {
+          root: { width: 100, height: 50 },
+          a: { width: 150, height: 50 },
+          b: { width: 100, height: 50 },
+          c: { width: 100, height: 50 },
+          d: { width: 100, height: 50 },
+          e: { width: 100, height: 50 },
+          f: { width: 100, height: 50 },
+          g: { width: 150, height: 50 },  // Wide node that might be crossed
+          h: { width: 100, height: 50 }
+        },
+        [
+          ['root', 'a'],
+          ['root', 'b'],
+          ['a', 'g'],
+          ['b', 'c'],
+          ['b', 'd'],
+          ['b', 'e'],
+          ['d', 'f'],
+          ['f', 'h'],
+          ['h', 'b']  // Back-edge from h to b
+        ]
+      );
+
+      const layout = new LaneLayout(graph, analysis, {
+        backEdgeOffset: 30,
+        nodeSep: 80
+      });
+      layout.compute();
+
+      const backEdge = layout.edgePaths.get('h->b');
+      expect(backEdge).toBeDefined();
+      expect(backEdge.isBackEdge).toBe(true);
+
+      const intersections = backEdgeIntersectsNodes(
+        backEdge,
+        layout.nodePositions,
+        'h',
+        'b'
+      );
+
+      // Should not cross any nodes
+      if (intersections.length > 0) {
+        console.log('Back-edge h->b crosses nodes:', intersections.map(i => i.nodeId));
+        console.log('Back-edge path:', backEdge.points);
+        console.log('Node positions:');
+        for (const [nodeId, pos] of layout.nodePositions) {
+          console.log(`  ${nodeId}: x=${pos.x}, y=${pos.y}, width=${pos.width}`);
+        }
+      }
+
+      expect(intersections).toHaveLength(0);
+    });
+
+    it('should handle horizontal segment crossing when nodes are at same rank as source', () => {
+      // Specific test: back-edge source has siblings at the same rank
+      // that the horizontal segment must avoid
+      //
+      //       root
+      //      / | \
+      //     a  b  c    <- all at rank 1
+      //     |  |  |
+      //     d  e  f    <- all at rank 2
+      //        |
+      //        g -> back to b
+      //
+      // The horizontal segment from g (at rank 3) to the routing channel is fine.
+      // But the horizontal segment from the channel to b (at rank 1) might
+      // cross nodes a or c depending on routing side.
+      const { graph, analysis } = createGraphAndAnalysis(
+        {
+          root: { width: 100, height: 50 },
+          a: { width: 150, height: 50 },
+          b: { width: 100, height: 50 },
+          c: { width: 150, height: 50 },
+          d: { width: 100, height: 50 },
+          e: { width: 100, height: 50 },
+          f: { width: 100, height: 50 },
+          g: { width: 100, height: 50 }
+        },
+        [
+          ['root', 'a'],
+          ['root', 'b'],
+          ['root', 'c'],
+          ['a', 'd'],
+          ['b', 'e'],
+          ['c', 'f'],
+          ['e', 'g'],
+          ['g', 'b']  // Back-edge
+        ]
+      );
+
+      const layout = new LaneLayout(graph, analysis, {
+        backEdgeOffset: 30,
+        nodeSep: 80
+      });
+      layout.compute();
+
+      const backEdge = layout.edgePaths.get('g->b');
+      expect(backEdge).toBeDefined();
+
+      const intersections = backEdgeIntersectsNodes(
+        backEdge,
+        layout.nodePositions,
+        'g',
+        'b'
+      );
+
+      if (intersections.length > 0) {
+        console.log('Back-edge g->b crosses nodes:', intersections.map(i => i.nodeId));
+        console.log('Back-edge path:', backEdge.points);
+        console.log('Routing side:', backEdge.routingSide);
+        console.log('Channel X:', backEdge.channelX);
+        for (const [nodeId, pos] of layout.nodePositions) {
+          console.log(`  ${nodeId}: x=${pos.x.toFixed(1)}, y=${pos.y}, w=${pos.width}, rank=${pos.rank}`);
+        }
+      }
+
+      expect(intersections).toHaveLength(0);
+    });
+  });
 });
