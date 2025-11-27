@@ -51,6 +51,9 @@ export class JourneyLayout {
     // Step 5: Assign lanes to edges sharing gutters (prevents overlapping)
     this._assignEdgeLanes(edgeRoutes, placements);
 
+    // Step 5c: Assign vertical lanes to routed edges with overlapping vertical segments
+    this._assignVerticalLanes(edgeRoutes, placements);
+
     // Step 6: Calculate traffic gutter sizes based on edge traversals
     const gutterSizes = this._calculateGutterSizes(edgeRoutes, grid, placements);
 
@@ -877,22 +880,10 @@ export class JourneyLayout {
         }
       });
 
-      // Routed edges also need vertical gutter space
-      // The vertical X position is determined by the lane in the first horizontal gutter
-      if (route.routeType === 'routed') {
-        const sourcePlacement = placements.get(route.source);
-        const destPlacement = placements.get(route.dest);
-        const goingDown = destPlacement.row > sourcePlacement.row;
-        const goingRight = destPlacement.col > sourcePlacement.col;
-
-        // Determine which vertical gutter this edge uses
-        const vGutterCol = goingRight ? sourcePlacement.col + 1 : sourcePlacement.col;
-
-        // Get the lane from the first horizontal gutter (used for vertical X positioning)
-        const exitGutterRow = goingDown ? sourcePlacement.row : sourcePlacement.row - 1;
-        const vGutterKey = `h:${exitGutterRow}`;
-        const lane = route.gutterLanes.get(vGutterKey) || 0;
-
+      // Routed edges need vertical gutter space based on their verticalLane
+      if (route.routeType === 'routed' && route.verticalGutterIdx !== undefined) {
+        const vGutterCol = route.verticalGutterIdx;
+        const lane = route.verticalLane || 0;
         vGutterMaxLane[vGutterCol] = Math.max(vGutterMaxLane[vGutterCol], lane);
       }
     });
@@ -965,6 +956,106 @@ export class JourneyLayout {
     edgeRoutes.forEach(route => {
       if (route.lane === undefined) route.lane = 0;
       if (!route.gutterLanes) route.gutterLanes = new Map();
+    });
+  }
+
+  /**
+   * Step 5c: Assign vertical lanes to routed edges
+   *
+   * Routed edges have a vertical segment that travels through a vertical gutter.
+   * When multiple routed edges share the same vertical gutter AND have overlapping
+   * row ranges, they need unique vertical lanes to avoid visual overlap.
+   *
+   * This is separate from horizontal gutter lanes because the vertical X position
+   * needs to be coordinated across all edges sharing vertical space, regardless
+   * of which horizontal gutter they exit from.
+   */
+  _assignVerticalLanes(edgeRoutes, placements) {
+    // Only routed edges have vertical segments
+    const routedEdges = edgeRoutes.filter(r => r.routeType === 'routed');
+
+    // Group by vertical gutter index
+    const byVerticalGutter = new Map();
+
+    routedEdges.forEach(route => {
+      const sp = placements.get(route.source);
+      const dp = placements.get(route.dest);
+      if (!sp || !dp) return;
+
+      const goingDown = dp.row > sp.row;
+      const goingRight = dp.col > sp.col;
+
+      // Vertical segment row range
+      const verticalStart = Math.min(sp.row, dp.row - 1);
+      const verticalEnd = Math.max(sp.row, dp.row - 1);
+
+      // Vertical gutter index (to the right of source col if going right, else to left)
+      const vGutterIdx = goingRight ? sp.col + 1 : sp.col;
+
+      if (!byVerticalGutter.has(vGutterIdx)) {
+        byVerticalGutter.set(vGutterIdx, []);
+      }
+
+      byVerticalGutter.get(vGutterIdx).push({
+        route,
+        verticalStart,
+        verticalEnd,
+        goingRight
+      });
+    });
+
+    // For each vertical gutter, assign lanes to edges with overlapping row ranges
+    // Note: edges going in opposite directions (goingRight vs goingLeft) BOTH use this
+    // gutter and need unique lanes to avoid visual overlap in the middle
+    byVerticalGutter.forEach((edges, vGutterIdx) => {
+      // Sort by vertical start row for consistent assignment
+      edges.sort((a, b) => a.verticalStart - b.verticalStart);
+
+      // Track which lanes are occupied at each row
+      // lanes[lane] = array of {start, end} ranges using that lane
+      // All edges (regardless of direction) share the same lane pool to prevent overlap
+      const laneRanges = [];
+
+      edges.forEach(({ route, verticalStart, verticalEnd, goingRight }) => {
+        // Find first lane where this edge doesn't overlap with existing edges
+        let assignedLane = 0;
+
+        while (true) {
+          if (!laneRanges[assignedLane]) {
+            // Lane is empty, use it
+            laneRanges[assignedLane] = [];
+            break;
+          }
+
+          // Check if this edge overlaps with any existing range in this lane
+          const hasOverlap = laneRanges[assignedLane].some(range => {
+            return !(verticalEnd < range.start || verticalStart > range.end);
+          });
+
+          if (!hasOverlap) {
+            // No overlap, use this lane
+            break;
+          }
+
+          // Try next lane
+          assignedLane++;
+        }
+
+        // Record this edge's range in the assigned lane
+        laneRanges[assignedLane].push({ start: verticalStart, end: verticalEnd });
+
+        // Store the vertical lane and direction on the route
+        route.verticalLane = assignedLane;
+        route.verticalGutterIdx = vGutterIdx;
+        route.verticalGoingRight = goingRight;
+      });
+    });
+
+    // Ensure all routed edges have a verticalLane (default 0)
+    routedEdges.forEach(route => {
+      if (route.verticalLane === undefined) {
+        route.verticalLane = 0;
+      }
     });
   }
 
@@ -1380,11 +1471,9 @@ export class JourneyLayout {
       const goingDown = destPlacement.row > sourcePlacement.row;
       const goingRight = destPlacement.col > sourcePlacement.col;
 
-      // Get lane offsets - use the first horizontal gutter for vertical X positioning
-      // This separates edges that share the vertical segment space
-      const exitGutterRow = goingDown ? sourcePlacement.row : sourcePlacement.row - 1;
-      const vGutterKey = `h:${exitGutterRow}`;
-      const vLaneOffset = getLaneOffset(vGutterKey);
+      // Get vertical lane offset from the dedicated verticalLane assignment
+      // This ensures edges with overlapping vertical segments get unique X positions
+      const vLaneOffset = (route.verticalLane || 0) * this.options.edgeSpacing;
 
       // Get lane offset for the horizontal segment
       const hGutterRow = goingDown ? destPlacement.row - 1 : destPlacement.row;
@@ -1392,17 +1481,16 @@ export class JourneyLayout {
       const hLaneOffset = getLaneOffset(hGutterKey);
 
       // Vertical lane position - placed in the vertical gutter with margin from nodes
-      // Use vLaneOffset to separate edges that share the vertical path
-      let vLaneX;
-      if (goingRight) {
-        // Going right: use right gutter of source column
-        const gutterLeft = colX[sourcePlacement.col] + colWidths[sourcePlacement.col];
-        vLaneX = gutterLeft + laneMargin + vLaneOffset;
+      // All edges in the same vertical gutter use the same X reference (left edge of gutter)
+      // to ensure consistent lane positioning regardless of direction
+      const vGutterIdx = goingRight ? sourcePlacement.col + 1 : sourcePlacement.col;
+      let gutterLeft;
+      if (vGutterIdx === 0) {
+        gutterLeft = 0;
       } else {
-        // Going left: use left gutter of source column
-        const gutterRight = colX[sourcePlacement.col];
-        vLaneX = gutterRight - laneMargin - vLaneOffset;
+        gutterLeft = colX[vGutterIdx - 1] + colWidths[vGutterIdx - 1];
       }
+      const vLaneX = gutterLeft + laneMargin + vLaneOffset;
 
       // Horizontal lane position
       const hGutterTop = rowY[hGutterRow] + rowHeights[hGutterRow];
