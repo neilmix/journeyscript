@@ -880,8 +880,9 @@ export class JourneyLayout {
         }
       });
 
-      // Routed edges need vertical gutter space based on their verticalLane
-      if (route.routeType === 'routed' && route.verticalGutterIdx !== undefined) {
+      // Routed and vertical-via-gutter edges need vertical gutter space based on their verticalLane
+      if ((route.routeType === 'routed' || route.routeType === 'vertical-via-gutter') &&
+          route.verticalGutterIdx !== undefined) {
         const vGutterCol = route.verticalGutterIdx;
         const lane = route.verticalLane || 0;
         vGutterMaxLane[vGutterCol] = Math.max(vGutterMaxLane[vGutterCol], lane);
@@ -971,26 +972,40 @@ export class JourneyLayout {
    * of which horizontal gutter they exit from.
    */
   _assignVerticalLanes(edgeRoutes, placements) {
-    // Only routed edges have vertical segments
-    const routedEdges = edgeRoutes.filter(r => r.routeType === 'routed');
+    // Both 'routed' and 'vertical-via-gutter' edges use vertical gutters
+    const edgesWithVerticalSegments = edgeRoutes.filter(r =>
+      r.routeType === 'routed' || r.routeType === 'vertical-via-gutter'
+    );
 
     // Group by vertical gutter index
     const byVerticalGutter = new Map();
 
-    routedEdges.forEach(route => {
+    edgesWithVerticalSegments.forEach(route => {
       const sp = placements.get(route.source);
       const dp = placements.get(route.dest);
       if (!sp || !dp) return;
 
       const goingDown = dp.row > sp.row;
-      const goingRight = dp.col > sp.col;
 
-      // Vertical segment row range
-      const verticalStart = Math.min(sp.row, dp.row - 1);
-      const verticalEnd = Math.max(sp.row, dp.row - 1);
+      let vGutterIdx, goingRight, verticalStart, verticalEnd;
 
-      // Vertical gutter index (to the right of source col if going right, else to left)
-      const vGutterIdx = goingRight ? sp.col + 1 : sp.col;
+      if (route.routeType === 'routed') {
+        goingRight = dp.col > sp.col;
+        // Vertical segment row range for routed edges
+        verticalStart = Math.min(sp.row, dp.row - 1);
+        verticalEnd = Math.max(sp.row, dp.row - 1);
+        // Vertical gutter index (to the right of source col if going right, else to left)
+        vGutterIdx = goingRight ? sp.col + 1 : sp.col;
+      } else {
+        // vertical-via-gutter: same column, uses left or right gutter
+        // The exit side tells us which gutter is used
+        const useLeft = route.exitSide.includes('left');
+        goingRight = !useLeft; // If using left gutter, we're conceptually "going left"
+        vGutterIdx = useLeft ? sp.col : sp.col + 1;
+        // Vertical segment spans from source to dest row
+        verticalStart = Math.min(sp.row, dp.row);
+        verticalEnd = Math.max(sp.row, dp.row);
+      }
 
       if (!byVerticalGutter.has(vGutterIdx)) {
         byVerticalGutter.set(vGutterIdx, []);
@@ -1051,8 +1066,8 @@ export class JourneyLayout {
       });
     });
 
-    // Ensure all routed edges have a verticalLane (default 0)
-    routedEdges.forEach(route => {
+    // Ensure all edges with vertical segments have a verticalLane (default 0)
+    edgesWithVerticalSegments.forEach(route => {
       if (route.verticalLane === undefined) {
         route.verticalLane = 0;
       }
@@ -1438,17 +1453,19 @@ export class JourneyLayout {
     } else if (route.routeType === 'vertical-via-gutter') {
       // Route through vertical gutter to left or right
       const useLeft = route.exitSide.includes('left');
-      const vGutterKey = useLeft ? `v:${sourcePlacement.col}` : `v:${sourcePlacement.col + 1}`;
-      const laneOffset = getLaneOffset(vGutterKey);
 
-      let laneX;
-      if (useLeft) {
-        const gutterRight = colX[sourcePlacement.col];
-        laneX = gutterRight - laneMargin - laneOffset;
+      // Use verticalLane for consistent X positioning with routed edges
+      const vLaneOffset = (route.verticalLane || 0) * this.options.edgeSpacing;
+
+      // Calculate X from the left edge of the gutter for consistency with routed edges
+      const vGutterIdx = useLeft ? sourcePlacement.col : sourcePlacement.col + 1;
+      let gutterLeft;
+      if (vGutterIdx === 0) {
+        gutterLeft = 0;
       } else {
-        const gutterLeft = colX[sourcePlacement.col] + colWidths[sourcePlacement.col];
-        laneX = gutterLeft + laneMargin + laneOffset;
+        gutterLeft = colX[vGutterIdx - 1] + colWidths[vGutterIdx - 1];
       }
+      const laneX = gutterLeft + laneMargin + vLaneOffset;
 
       // Determine direction
       const goingRight = !useLeft;

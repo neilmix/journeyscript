@@ -533,22 +533,34 @@ class JourneyLayout {
     });
   }
 
-  // NEW: Assign vertical lanes to routed edges with overlapping vertical segments
+  // Assign vertical lanes to routed AND vertical-via-gutter edges with overlapping vertical segments
   _assignVerticalLanes(edgeRoutes, placements) {
-    const routedEdges = edgeRoutes.filter(r => r.routeType === 'routed');
+    const edgesWithVerticalSegments = edgeRoutes.filter(r =>
+      r.routeType === 'routed' || r.routeType === 'vertical-via-gutter'
+    );
     const byVerticalGutter = new Map();
 
-    routedEdges.forEach(route => {
+    edgesWithVerticalSegments.forEach(route => {
       const sp = placements.get(route.source);
       const dp = placements.get(route.dest);
       if (!sp || !dp) return;
 
       const goingDown = dp.row > sp.row;
-      const goingRight = dp.col > sp.col;
+      let vGutterIdx, goingRight, verticalStart, verticalEnd;
 
-      const verticalStart = Math.min(sp.row, dp.row - 1);
-      const verticalEnd = Math.max(sp.row, dp.row - 1);
-      const vGutterIdx = goingRight ? sp.col + 1 : sp.col;
+      if (route.routeType === 'routed') {
+        goingRight = dp.col > sp.col;
+        verticalStart = Math.min(sp.row, dp.row - 1);
+        verticalEnd = Math.max(sp.row, dp.row - 1);
+        vGutterIdx = goingRight ? sp.col + 1 : sp.col;
+      } else {
+        // vertical-via-gutter
+        const useLeft = route.exitSide.includes('left');
+        goingRight = !useLeft;
+        vGutterIdx = useLeft ? sp.col : sp.col + 1;
+        verticalStart = Math.min(sp.row, dp.row);
+        verticalEnd = Math.max(sp.row, dp.row);
+      }
 
       if (!byVerticalGutter.has(vGutterIdx)) {
         byVerticalGutter.set(vGutterIdx, []);
@@ -590,7 +602,7 @@ class JourneyLayout {
       });
     });
 
-    routedEdges.forEach(route => {
+    edgesWithVerticalSegments.forEach(route => {
       if (route.verticalLane === undefined) {
         route.verticalLane = 0;
       }
@@ -657,7 +669,43 @@ function analyzeEdgeLanes(edgeRoutes, placements) {
   // For "routed" edges, check if they share the same vertical path X position
   // even if they're in different horizontal gutters
   const routedEdges = edgeRoutes.filter(r => r.routeType === 'routed');
-  console.log(`Found ${routedEdges.length} routed edges.\n`);
+  console.log(`Found ${routedEdges.length} routed edges:\n`);
+  routedEdges.forEach(route => {
+    const sp = placements.get(route.source);
+    const dp = placements.get(route.dest);
+    const goingRight = dp.col > sp.col;
+    const vGutterIdx = goingRight ? sp.col + 1 : sp.col;
+    console.log(`  ${route.source} -> ${route.dest}: row ${sp.row}->${dp.row}, col ${sp.col}->${dp.col}, vGutter=${vGutterIdx}, vLane=${route.verticalLane}, goingRight=${goingRight}`);
+  });
+  console.log('');
+
+  // Check specific edges we're interested in
+  console.log('Checking infrared-photo and delete-infrared-photo edges:');
+  edgeRoutes.forEach(route => {
+    if (route.source === 'infrared-photo' || route.source === 'delete-infrared-photo') {
+      const sp = placements.get(route.source);
+      const dp = placements.get(route.dest);
+      console.log(`  ${route.source} -> ${route.dest}: routeType=${route.routeType}, row ${sp?.row}->${dp?.row}, col ${sp?.col}->${dp?.col}, vLane=${route.verticalLane}`);
+    }
+  });
+  console.log('');
+
+  // Check ALL edges that might use vgutter 9 (between col 8 and 9)
+  console.log('Edges potentially using vgutter 9:');
+  edgeRoutes.forEach(route => {
+    const sp = placements.get(route.source);
+    const dp = placements.get(route.dest);
+    if (!sp || !dp) return;
+
+    // Check if edge crosses between col 8 and 9
+    const minCol = Math.min(sp.col, dp.col);
+    const maxCol = Math.max(sp.col, dp.col);
+    if ((minCol === 8 && maxCol === 9) ||
+        (route.routeType === 'vertical-via-gutter' && (sp.col === 8 || sp.col === 9))) {
+      console.log(`  ${route.source} -> ${route.dest}: routeType=${route.routeType}, row ${sp.row}->${dp.row}, col ${sp.col}->${dp.col}, exitSide=${route.exitSide}, vLane=${route.verticalLane}`);
+    }
+  });
+  console.log('');
 
   // Group routed edges by their source column (they share vertical X position)
   const bySourceCol = new Map();
