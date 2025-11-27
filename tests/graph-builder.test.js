@@ -25,10 +25,10 @@ describe('Graph Building', () => {
     visualizer._discoverSteps();
     visualizer._buildGraph();
 
-    expect(visualizer.graph.nodes()).toHaveLength(3);
-    expect(visualizer.graph.hasNode('start')).toBe(true);
-    expect(visualizer.graph.hasNode('middle')).toBe(true);
-    expect(visualizer.graph.hasNode('end')).toBe(true);
+    expect(visualizer._nodeData.size).toBe(3);
+    expect(visualizer._nodeData.has('start')).toBe(true);
+    expect(visualizer._nodeData.has('middle')).toBe(true);
+    expect(visualizer._nodeData.has('end')).toBe(true);
   });
 
   it('should build graph with edges from data-dest attributes', () => {
@@ -36,10 +36,12 @@ describe('Graph Building', () => {
     visualizer._discoverSteps();
     visualizer._buildGraph();
 
-    expect(visualizer.graph.edges()).toHaveLength(4);
-    expect(visualizer.graph.hasEdge('start', 'middle')).toBe(true);
-    expect(visualizer.graph.hasEdge('middle', 'end')).toBe(true);
-    expect(visualizer.graph.hasEdge('middle', 'start')).toBe(true);
+    expect(visualizer._edgeData).toHaveLength(4);
+
+    const hasEdge = (src, dst) => visualizer._edgeData.some(e => e.source === src && e.dest === dst);
+    expect(hasEdge('start', 'middle')).toBe(true);
+    expect(hasEdge('middle', 'end')).toBe(true);
+    expect(hasEdge('middle', 'start')).toBe(true);
   });
 
   it('should store edge labels from button text', () => {
@@ -47,7 +49,7 @@ describe('Graph Building', () => {
     visualizer._discoverSteps();
     visualizer._buildGraph();
 
-    const edge = visualizer.graph.edge('start', 'middle');
+    const edge = visualizer._edgeData.find(e => e.source === 'start' && e.dest === 'middle');
     expect(edge.label).toBe('Next');
   });
 

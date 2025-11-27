@@ -23,13 +23,12 @@ describe('Layout Computation', () => {
     visualizer._buildGraph();
     visualizer._computeLayout();
 
-    const node1 = visualizer.graph.node('step1');
-    const node2 = visualizer.graph.node('step2');
+    const positions = visualizer._layoutResult.positions;
 
-    expect(node1.x).toBeDefined();
-    expect(node1.y).toBeDefined();
-    expect(node2.x).toBeDefined();
-    expect(node2.y).toBeDefined();
+    expect(positions.get('step1').x).toBeDefined();
+    expect(positions.get('step1').y).toBeDefined();
+    expect(positions.get('step2').x).toBeDefined();
+    expect(positions.get('step2').y).toBeDefined();
   });
 
   it('should compute path points for edges', () => {
@@ -38,28 +37,29 @@ describe('Layout Computation', () => {
     visualizer._buildGraph();
     visualizer._computeLayout();
 
-    const edge = visualizer.graph.edge('step1', 'step2');
+    const edgePaths = visualizer._layoutResult.edgePaths;
+    const edge = edgePaths.find(e => e.source === 'step1' && e.dest === 'step2');
 
+    expect(edge).toBeDefined();
     expect(edge.points).toBeDefined();
     expect(edge.points.length).toBeGreaterThan(1);
     expect(edge.points[0]).toHaveProperty('x');
     expect(edge.points[0]).toHaveProperty('y');
   });
 
-  it('should arrange nodes top-to-bottom for TB direction', () => {
-    const visualizer = new JourneyVisualizer('.journey-container', {
-      layout: { direction: 'TB' }
-    });
+  it('should arrange nodes top-to-bottom', () => {
+    const visualizer = new JourneyVisualizer('.journey-container');
     visualizer._discoverSteps();
     visualizer._buildGraph();
     visualizer._computeLayout();
 
-    const node1 = visualizer.graph.node('step1');
-    const node2 = visualizer.graph.node('step2');
-    const node3 = visualizer.graph.node('step3');
+    const positions = visualizer._layoutResult.positions;
+    const pos1 = positions.get('step1');
+    const pos2 = positions.get('step2');
+    const pos3 = positions.get('step3');
 
-    // In TB layout, y should increase down the flow
-    expect(node1.y).toBeLessThan(node2.y);
-    expect(node2.y).toBeLessThan(node3.y);
+    // In top-to-bottom layout, y should increase down the flow
+    expect(pos1.y).toBeLessThan(pos2.y);
+    expect(pos2.y).toBeLessThan(pos3.y);
   });
 });

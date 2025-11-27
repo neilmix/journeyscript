@@ -1,5 +1,5 @@
 // src/JourneyVisualizer.js
-import dagre from 'dagre';
+import { JourneyLayout } from './JourneyLayout.js';
 import { ZoomPanController } from './ZoomPanController.js';
 
 export class JourneyVisualizer {
@@ -12,19 +12,16 @@ export class JourneyVisualizer {
 
     this.options = this._mergeOptions(options);
     this.steps = [];
-    this.graph = null;
     this.zoomPanController = null;
   }
 
   _mergeOptions(userOptions) {
     const defaults = {
       layout: {
-        direction: 'TB',
         rankSep: 120,
         nodeSep: 150,
-        edgeSep: 50,
-        align: 'DL',
-        ranker: 'tight-tree'
+        edgeSpacing: 20,
+        minGutterSize: 40
       },
       zoom: {
         initial: 1,
@@ -78,37 +75,27 @@ export class JourneyVisualizer {
   }
 
   _buildGraph() {
-    this.graph = new dagre.graphlib.Graph();
-
-    // Configure graph layout
-    this.graph.setGraph({
-      rankdir: this.options.layout.direction,
-      ranksep: this.options.layout.rankSep,
-      nodesep: this.options.layout.nodeSep,
-      edgesep: this.options.layout.edgeSep,
-      align: this.options.layout.align,
-      ranker: this.options.layout.ranker
-    });
-
     // Set position:absolute on steps BEFORE measuring to get accurate dimensions
     this.steps.forEach(step => {
       step.style.position = 'absolute';
     });
 
-    // Add nodes with accurate measurements
+    // Collect node and edge data
+    const validStepIds = new Set(this.steps.map(s => s.id));
+    this._nodeData = new Map();
+    this._edgeData = [];
+
+    // Measure nodes
     this.steps.forEach(step => {
       const rect = step.getBoundingClientRect();
-
-      this.graph.setNode(step.id, {
-        width: rect.width || 200,  // Default width if not rendered
-        height: rect.height || 100, // Default height if not rendered
+      this._nodeData.set(step.id, {
+        width: rect.width || 200,
+        height: rect.height || 100,
         element: step
       });
     });
 
-    // Add edges
-    const validStepIds = new Set(this.steps.map(s => s.id));
-
+    // Collect edges
     this.steps.forEach(step => {
       const actions = step.querySelectorAll('[data-dest]');
 
@@ -116,84 +103,91 @@ export class JourneyVisualizer {
         const destId = action.getAttribute('data-dest');
         const label = action.textContent.trim();
 
-        // Validate destination exists
         if (!validStepIds.has(destId)) {
           console.warn(`Invalid destination: ${step.id} -> ${destId}`);
           return;
         }
 
-        this.graph.setEdge(step.id, destId, {
+        this._edgeData.push({
+          source: step.id,
+          dest: destId,
           label: label,
           sourceElement: action
         });
       });
     });
+
+    // Find root nodes (nodes with no incoming edges)
+    const hasIncoming = new Set(this._edgeData.map(e => e.dest));
+    const roots = [];
+    this._nodeData.forEach((_, id) => {
+      if (!hasIncoming.has(id)) {
+        roots.push(id);
+      }
+    });
+
+    // If no roots found (pure cycle), use first node
+    if (roots.length === 0 && this._nodeData.size > 0) {
+      roots.push(this._nodeData.keys().next().value);
+    }
+
+    this._graphData = {
+      nodes: this._nodeData,
+      edges: this._edgeData,
+      roots: roots
+    };
   }
 
   _computeLayout() {
-    console.time('dagre-layout');
-    dagre.layout(this.graph);
-    console.timeEnd('dagre-layout');
+    console.time('journey-layout');
+    const layout = new JourneyLayout({
+      rankSep: this.options.layout.rankSep,
+      nodeSep: this.options.layout.nodeSep,
+      edgeSpacing: this.options.layout.edgeSpacing,
+      minGutterSize: this.options.layout.minGutterSize
+    });
+
+    this._layoutResult = layout.computeLayout(this._graphData);
+    console.timeEnd('journey-layout');
   }
 
   _positionSteps() {
-    let minX = Infinity, minY = Infinity;
-    let maxX = -Infinity, maxY = -Infinity;
-
-    // First pass: track bounds
-    const positions = new Map();
-    this.graph.nodes().forEach(nodeId => {
-      const node = this.graph.node(nodeId);
-
-      // Dagre gives center coordinates, convert to top-left
-      const x = node.x - node.width / 2;
-      const y = node.y - node.height / 2;
-
-      positions.set(nodeId, { x, y });
-
-      // Track bounds
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x + node.width);
-      maxY = Math.max(maxY, y + node.height);
-    });
+    const { positions, bounds } = this._layoutResult;
 
     // Calculate padding based on viewport size to allow centering any step
-    // Use viewport dimensions if available, otherwise fallback to reasonable default
     const viewport = this.container.parentElement;
     let padding = 50; // Minimum padding for aesthetics
 
     if (viewport) {
-      // Add at least half the viewport dimensions as padding
-      // This ensures any step can be panned to the center
       const viewportPadding = Math.max(viewport.clientWidth / 2, viewport.clientHeight / 2);
       padding = Math.max(padding, viewportPadding);
     }
 
-    // Second pass: position steps with padding offset
-    this.graph.nodes().forEach(nodeId => {
-      const node = this.graph.node(nodeId);
-      const step = node.element;
-      const pos = positions.get(nodeId);
+    // Position each step using layout results
+    positions.forEach((pos, nodeId) => {
+      const nodeData = this._nodeData.get(nodeId);
+      if (!nodeData) return;
 
-      // Shift by padding and normalize to container origin
-      const x = pos.x - minX + padding;
-      const y = pos.y - minY + padding;
+      const step = nodeData.element;
+
+      // JourneyLayout gives top-left coordinates, add padding
+      const x = pos.x + padding;
+      const y = pos.y + padding;
 
       step.style.position = 'absolute';
       step.style.left = `${x}px`;
       step.style.top = `${y}px`;
     });
 
-    const width = maxX - minX + padding * 2;
-    const height = maxY - minY + padding * 2;
+    const width = bounds.width + padding * 2;
+    const height = bounds.height + padding * 2;
 
     this.container.style.width = `${width}px`;
     this.container.style.height = `${height}px`;
     this.container.style.position = 'relative';
 
-    // Store bounds for later use
-    this.bounds = { minX, minY, maxX, maxY, padding };
+    // Store bounds for arrow drawing
+    this.bounds = { ...bounds, padding };
   }
 
   _createSvgOverlay(width, height) {
@@ -234,21 +228,18 @@ export class JourneyVisualizer {
   }
 
   _drawArrows() {
-    // Calculate offset to account for padding added in _positionSteps
-    const offsetX = -this.bounds.minX + this.bounds.padding;
-    const offsetY = -this.bounds.minY + this.bounds.padding;
+    const { edgePaths } = this._layoutResult;
+    const padding = this.bounds.padding;
 
-    // First pass: draw all arrow paths and collect label data
-    const labelData = [];
+    // Draw each edge path
+    edgePaths.forEach(edge => {
+      if (!edge.points || edge.points.length < 2) return;
 
-    this.graph.edges().forEach(edgeObj => {
-      const edge = this.graph.edge(edgeObj);
-
-      // Build SVG path from Dagre-computed points, offset by padding
+      // Build SVG path from computed points, offset by padding
       const pathData = edge.points
         .map((point, i) => {
-          const x = point.x + offsetX;
-          const y = point.y + offsetY;
+          const x = point.x + padding;
+          const y = point.y + padding;
           return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
         })
         .join(' ');
@@ -256,166 +247,51 @@ export class JourneyVisualizer {
       // Create arrow path
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('d', pathData);
-      path.setAttribute('class', 'journey-arrow');
+      path.setAttribute('class', 'journey-arrow' + (edge.isBackRef ? ' back-ref' : ''));
       path.setAttribute('marker-end', 'url(#arrowhead)');
       path.setAttribute('fill', 'none');
       path.setAttribute('stroke', this.options.arrows.color);
       path.setAttribute('stroke-width', this.options.arrows.width);
 
+      // Style back-references differently
+      if (edge.isBackRef) {
+        path.setAttribute('stroke-dasharray', '5,3');
+      }
+
       this.svgOverlay.appendChild(path);
 
-      // Collect label data for collision detection
-      if (this.options.arrows.showLabels && edge.label) {
+      // Draw label if present (using pre-computed labelPoint)
+      if (this.options.arrows.showLabels && edge.label && edge.labelPoint) {
+        const labelX = edge.labelPoint.x + padding;
+        const labelY = edge.labelPoint.y + padding;
         const bbox = { width: edge.label.length * 7, height: 16 };
-        labelData.push({
-          edge: edge,
-          edgePoints: edge.points,
-          label: edge.label,
-          bbox: bbox,
-          position: 0.5  // Start at midpoint (50%)
-        });
-      }
-    });
 
-    // Second pass: detect collisions and adjust label positions
-    if (labelData.length > 0) {
-      this._adjustLabelPositions(labelData);
-
-      // Third pass: render labels at adjusted positions
-      labelData.forEach(data => {
-        const point = this._getPointAlongEdge(data.edgePoints, data.position);
-        const midX = point.x + offsetX;
-        const midY = point.y + offsetY;
+        // Add white background for readability
+        const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        bgRect.setAttribute('x', labelX - bbox.width / 2 - 4);
+        bgRect.setAttribute('y', labelY - bbox.height / 2 - 2);
+        bgRect.setAttribute('width', bbox.width + 8);
+        bgRect.setAttribute('height', bbox.height + 4);
+        bgRect.setAttribute('fill', 'white');
+        bgRect.setAttribute('stroke', '#ccc');
+        bgRect.setAttribute('stroke-width', '1');
+        bgRect.setAttribute('rx', '3');
 
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('x', midX);
-        text.setAttribute('y', midY);
+        text.setAttribute('x', labelX);
+        text.setAttribute('y', labelY);
         text.setAttribute('class', 'arrow-label');
         text.setAttribute('text-anchor', 'middle');
         text.setAttribute('dominant-baseline', 'middle');
         text.setAttribute('fill', this.options.arrows.color);
         text.setAttribute('font-size', '12px');
         text.setAttribute('font-family', 'system-ui, sans-serif');
-        text.textContent = data.label;
-
-        // Add white background for readability
-        const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        bgRect.setAttribute('x', midX - data.bbox.width / 2 - 4);
-        bgRect.setAttribute('y', midY - data.bbox.height / 2 - 2);
-        bgRect.setAttribute('width', data.bbox.width + 8);
-        bgRect.setAttribute('height', data.bbox.height + 4);
-        bgRect.setAttribute('fill', 'white');
-        bgRect.setAttribute('stroke', '#ccc');
-        bgRect.setAttribute('stroke-width', '1');
-        bgRect.setAttribute('rx', '3');
+        text.textContent = edge.label;
 
         this.svgOverlay.appendChild(bgRect);
         this.svgOverlay.appendChild(text);
-      });
-    }
-  }
-
-  _getPointAlongEdge(points, position) {
-    // Get a point along the edge path at the given position (0.0 to 1.0)
-    // position 0.0 = start, 0.5 = midpoint, 1.0 = end
-
-    if (points.length === 0) return { x: 0, y: 0 };
-    if (points.length === 1) return points[0];
-
-    // Calculate total path length
-    let totalLength = 0;
-    const segments = [];
-    for (let i = 0; i < points.length - 1; i++) {
-      const dx = points[i + 1].x - points[i].x;
-      const dy = points[i + 1].y - points[i].y;
-      const length = Math.sqrt(dx * dx + dy * dy);
-      segments.push({ start: points[i], end: points[i + 1], length: length });
-      totalLength += length;
-    }
-
-    // Find the segment that contains our target position
-    const targetLength = totalLength * position;
-    let currentLength = 0;
-
-    for (const segment of segments) {
-      if (currentLength + segment.length >= targetLength) {
-        // This segment contains our target point
-        const segmentPosition = (targetLength - currentLength) / segment.length;
-        return {
-          x: segment.start.x + (segment.end.x - segment.start.x) * segmentPosition,
-          y: segment.start.y + (segment.end.y - segment.start.y) * segmentPosition
-        };
       }
-      currentLength += segment.length;
-    }
-
-    // Fallback: return the last point
-    return points[points.length - 1];
-  }
-
-  _adjustLabelPositions(labelData) {
-    // Detect collisions and adjust label positions along their edge paths
-    const maxIterations = 5;
-    const adjustmentStep = 0.05;  // Move 5% along the edge path per iteration
-
-    for (let iteration = 0; iteration < maxIterations; iteration++) {
-      let hadCollision = false;
-
-      // Check all pairs for collisions
-      for (let i = 0; i < labelData.length; i++) {
-        for (let j = i + 1; j < labelData.length; j++) {
-          const label1 = labelData[i];
-          const label2 = labelData[j];
-
-          // Get current positions with offsets
-          const offsetX = -this.bounds.minX + this.bounds.padding;
-          const offsetY = -this.bounds.minY + this.bounds.padding;
-
-          const point1 = this._getPointAlongEdge(label1.edgePoints, label1.position);
-          const point2 = this._getPointAlongEdge(label2.edgePoints, label2.position);
-
-          const x1 = point1.x + offsetX;
-          const y1 = point1.y + offsetY;
-          const x2 = point2.x + offsetX;
-          const y2 = point2.y + offsetY;
-
-          // Check for rectangle overlap (with padding)
-          const padding = 4;
-          const rect1 = {
-            left: x1 - label1.bbox.width / 2 - padding,
-            right: x1 + label1.bbox.width / 2 + padding,
-            top: y1 - label1.bbox.height / 2 - padding,
-            bottom: y1 + label1.bbox.height / 2 + padding
-          };
-
-          const rect2 = {
-            left: x2 - label2.bbox.width / 2 - padding,
-            right: x2 + label2.bbox.width / 2 + padding,
-            top: y2 - label2.bbox.height / 2 - padding,
-            bottom: y2 + label2.bbox.height / 2 + padding
-          };
-
-          if (this._rectanglesOverlap(rect1, rect2)) {
-            hadCollision = true;
-
-            // Move labels toward their source (decrease position value)
-            // Keep positions between 0.2 and 0.8 to stay on the edge
-            label1.position = Math.max(0.2, label1.position - adjustmentStep);
-            label2.position = Math.min(0.8, label2.position + adjustmentStep);
-          }
-        }
-      }
-
-      // If no collisions detected, we're done
-      if (!hadCollision) break;
-    }
-  }
-
-  _rectanglesOverlap(rect1, rect2) {
-    return rect1.left < rect2.right &&
-           rect1.right > rect2.left &&
-           rect1.top < rect2.bottom &&
-           rect1.bottom > rect2.top;
+    });
   }
 
   _initializePanZoom() {

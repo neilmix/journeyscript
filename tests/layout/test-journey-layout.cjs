@@ -247,18 +247,22 @@ describe('JourneyLayout', async () => {
     assert.strictEqual(result.placements.get('A').col, 0);
   });
 
-  test('centering in grid - odd width block', async () => {
+  test('compact layout - parent centered over children', async () => {
     const layout = new JourneyLayout();
-    // A has 3 children - odd width block
+    // A has 3 children - should be centered over them
     const graph = createGraph('A->B,C,D');
 
     const result = layout.computeLayout(graph);
 
-    console.log('\n=== Centering: Odd Width Block ===');
+    console.log('\n=== Compact Layout: Parent Centered ===');
     console.log(debugLayoutToAscii(result, result.nodeInfo, result.placements, result.grid));
 
-    // A should be exactly centered (column 1) in 3-column grid
+    // With compact + centered layout, A is centered at column 1 over children at 0, 1, 2
     assert.strictEqual(result.placements.get('A').col, 1);
+    // Children B, C, D at columns 0, 1, 2
+    assert.strictEqual(result.placements.get('B').col, 0);
+    assert.strictEqual(result.placements.get('C').col, 1);
+    assert.strictEqual(result.placements.get('D').col, 2);
   });
 
   test('deep nesting preserves lanes', async () => {
@@ -723,5 +727,109 @@ describe('JourneyLayout', async () => {
         }
       }
     });
+  });
+
+  // ============================================================
+  // LABEL PLACEMENT TESTS
+  // ============================================================
+
+  test('label placement - labels have positions computed', async () => {
+    const layout = new JourneyLayout();
+    const graph = {
+      nodes: new Map([
+        ['A', { width: 100, height: 50 }],
+        ['B', { width: 100, height: 50 }],
+        ['C', { width: 100, height: 50 }],
+      ]),
+      edges: [
+        { source: 'A', dest: 'B', label: 'yes' },
+        { source: 'A', dest: 'C', label: 'no' },
+      ],
+      roots: ['A']
+    };
+
+    const result = layout.computeLayout(graph);
+
+    console.log('\n=== Label Placement ===');
+    result.edgePaths.forEach(e => {
+      console.log(`${e.source}->${e.dest}: label="${e.label}", labelPoint=${JSON.stringify(e.labelPoint)}`);
+    });
+
+    // Each labeled edge should have a labelPoint
+    const abEdge = result.edgePaths.find(e => e.source === 'A' && e.dest === 'B');
+    const acEdge = result.edgePaths.find(e => e.source === 'A' && e.dest === 'C');
+
+    assert.ok(abEdge.labelPoint, 'A->B should have a label point');
+    assert.ok(acEdge.labelPoint, 'A->C should have a label point');
+    assert.ok(abEdge.labelPoint.x !== undefined && abEdge.labelPoint.y !== undefined);
+    assert.ok(acEdge.labelPoint.x !== undefined && acEdge.labelPoint.y !== undefined);
+  });
+
+  test('label placement - labels do not overlap nodes', async () => {
+    const layout = new JourneyLayout();
+    const graph = {
+      nodes: new Map([
+        ['A', { width: 100, height: 50 }],
+        ['B', { width: 100, height: 50 }],
+      ]),
+      edges: [
+        { source: 'A', dest: 'B', label: 'continue' },
+      ],
+      roots: ['A']
+    };
+
+    const result = layout.computeLayout(graph);
+
+    console.log('\n=== Label Not Overlapping Nodes ===');
+    const edge = result.edgePaths[0];
+    const aPos = result.positions.get('A');
+    const bPos = result.positions.get('B');
+
+    console.log(`A: (${aPos.x}, ${aPos.y}) - (${aPos.x + 100}, ${aPos.y + 50})`);
+    console.log(`B: (${bPos.x}, ${bPos.y}) - (${bPos.x + 100}, ${bPos.y + 50})`);
+    console.log(`Label point: (${edge.labelPoint.x}, ${edge.labelPoint.y})`);
+
+    // Label should not be inside node A
+    const labelInA = edge.labelPoint.x >= aPos.x && edge.labelPoint.x <= aPos.x + 100 &&
+                     edge.labelPoint.y >= aPos.y && edge.labelPoint.y <= aPos.y + 50;
+    // Label should not be inside node B
+    const labelInB = edge.labelPoint.x >= bPos.x && edge.labelPoint.x <= bPos.x + 100 &&
+                     edge.labelPoint.y >= bPos.y && edge.labelPoint.y <= bPos.y + 50;
+
+    assert.ok(!labelInA, 'Label should not overlap node A');
+    assert.ok(!labelInB, 'Label should not overlap node B');
+  });
+
+  test('label placement - multiple labels do not overlap each other', async () => {
+    const layout = new JourneyLayout();
+    const graph = {
+      nodes: new Map([
+        ['A', { width: 100, height: 50 }],
+        ['B', { width: 100, height: 50 }],
+        ['C', { width: 100, height: 50 }],
+      ]),
+      edges: [
+        { source: 'A', dest: 'B', label: 'path1' },
+        { source: 'A', dest: 'C', label: 'path2' },
+      ],
+      roots: ['A']
+    };
+
+    const result = layout.computeLayout(graph);
+
+    console.log('\n=== Labels Not Overlapping Each Other ===');
+    const abEdge = result.edgePaths.find(e => e.dest === 'B');
+    const acEdge = result.edgePaths.find(e => e.dest === 'C');
+
+    console.log(`A->B label at: (${abEdge.labelPoint.x}, ${abEdge.labelPoint.y})`);
+    console.log(`A->C label at: (${acEdge.labelPoint.x}, ${acEdge.labelPoint.y})`);
+
+    // Labels should be at different positions (at least 10px apart in some dimension)
+    const xDiff = Math.abs(abEdge.labelPoint.x - acEdge.labelPoint.x);
+    const yDiff = Math.abs(abEdge.labelPoint.y - acEdge.labelPoint.y);
+    const distance = Math.sqrt(xDiff * xDiff + yDiff * yDiff);
+
+    console.log(`Distance between labels: ${distance.toFixed(1)}px`);
+    assert.ok(distance > 10, 'Labels should not overlap (should be at least 10px apart)');
   });
 });

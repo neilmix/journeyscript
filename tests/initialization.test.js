@@ -24,7 +24,7 @@ describe('Full Initialization', () => {
 
     // Check all components initialized
     expect(visualizer.steps.length).toBe(2);
-    expect(visualizer.graph).toBeDefined();
+    expect(visualizer._layoutResult).toBeDefined();
     expect(visualizer.svgOverlay).toBeDefined();
     expect(visualizer.zoomPanController).toBeDefined();
   });

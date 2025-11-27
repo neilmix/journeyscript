@@ -255,15 +255,14 @@
           path.setAttribute('marker-end', `url(#arrowhead-${edge.isBackRef ? 'backref-' : ''}${title.replace(/\s+/g, '-')})`);
           svg.appendChild(path);
 
-          // Add label if present
-          if (edge.label) {
-            const midIdx = Math.floor(edge.points.length / 2);
-            const midPoint = edge.points[midIdx];
+          // Add label if present (using computed labelPoint)
+          if (edge.label && edge.labelPoint) {
             const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', midPoint.x + padding);
-            text.setAttribute('y', midPoint.y + padding - 5);
+            text.setAttribute('x', edge.labelPoint.x + padding);
+            text.setAttribute('y', edge.labelPoint.y + padding);
             text.setAttribute('class', 'edge-label');
             text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('dominant-baseline', 'middle');
             text.textContent = edge.label;
             svg.appendChild(text);
           }

@@ -63,6 +63,9 @@ export class JourneyLayout {
     // Step 9: Convert edge routes to pixel paths (with lane-based routing)
     const edgePaths = this._edgeRoutesToPixelPaths(edgeRoutes, placements, positions, nodes, grid, gutterSizes);
 
+    // Step 10: Calculate label positions (avoiding overlaps with nodes and other labels)
+    this._calculateLabelPositions(edgePaths, positions, nodes, placements);
+
     // Calculate bounds
     const bounds = this._calculateBounds(positions, nodes);
 
@@ -199,119 +202,175 @@ export class JourneyLayout {
 
   /**
    * Step 2: Calculate grid dimensions
-   * - rows = number of ranks
-   * - cols = max sum of childWidths at any rank
+   * We'll determine actual columns needed during placement
    */
   _calculateGridDimensions(nodeInfoData) {
     const { nodeInfo } = nodeInfoData;
 
     let maxRank = 0;
-    const rankWidths = new Map();
-
-    // Find nodes at rank 0 (roots) and calculate total width needed
     nodeInfo.forEach(info => {
       maxRank = Math.max(maxRank, info.rank);
-
-      // Only count root-level nodes for grid width
-      if (info.rank === 0) {
-        const currentWidth = rankWidths.get(0) || 0;
-        rankWidths.set(0, currentWidth + info.childWidth);
-      }
     });
 
-    const rows = maxRank + 1;
-    const cols = rankWidths.get(0) || 1;
-
-    return { rows, cols };
+    // Initial estimate - will be refined during placement
+    return { rows: maxRank + 1, cols: 1 };
   }
 
   /**
-   * Step 3: Place nodes in grid cells
-   * Each node gets placed in a cell based on:
-   * - Row = rank
-   * - Column = center of its childWidth block, shifted toward grid center on ties
+   * Step 3: Place nodes in grid cells with compact centering
+   *
+   * Algorithm:
+   * 1. Process nodes by rank, starting from deepest (bottom-up)
+   * 2. For each subtree, place children first using greedy left-packing with collision detection
+   * 3. Then place parent centered over children's actual positions
+   * 4. Collision detection is per-row, allowing vertical space sharing
+   *
+   * This allows leaf nodes at shallow depths to share vertical space with deeper subtrees.
    */
   _placeNodesInGrid(nodeInfoData, grid, roots, adjacency) {
     const { nodeInfo } = nodeInfoData;
     const placements = new Map();
 
-    // Place each subtree starting from roots
-    let currentCol = 0;
+    // Track occupied columns per row for collision detection
+    const rowOccupancy = new Map(); // row -> Set of occupied columns
 
+    // Process each root subtree
     roots.forEach(rootId => {
-      const info = nodeInfo.get(rootId);
-      if (!info) return;
-
-      this._placeSubtree(rootId, nodeInfo, placements, currentCol, info.childWidth, grid.cols);
-      currentCol += info.childWidth;
+      this._placeSubtreeCompact(rootId, nodeInfo, placements, rowOccupancy);
     });
+
+    // Calculate grid dimensions and center the tree
+    let maxCol = 0;
+    placements.forEach(p => {
+      if (p.col > maxCol) maxCol = p.col;
+    });
+    grid.cols = maxCol + 1;
+
+    // Center the tree
+    this._centerTree(placements, grid);
 
     return placements;
   }
 
   /**
-   * Recursively place a subtree
-   * @param {string} nodeId - Node to place
-   * @param {Map} nodeInfo - Node metadata
-   * @param {Map} placements - Output: nodeId -> {row, col}
-   * @param {number} blockStart - Starting column of this node's block
-   * @param {number} blockWidth - Width of this node's block
-   * @param {number} gridCols - Total grid columns
+   * Place a subtree compactly: children first, then parent centered over them
    */
-  _placeSubtree(nodeId, nodeInfo, placements, blockStart, blockWidth, gridCols) {
-    const info = nodeInfo.get(nodeId);
-    if (!info || placements.has(nodeId)) return;
+  _placeSubtreeCompact(nodeId, nodeInfo, placements, rowOccupancy) {
+    if (placements.has(nodeId)) return;
 
-    // Calculate column position within block
-    // Center the node in its block, shifting left on ties
-    const col = this._centerInBlock(blockStart, blockWidth, gridCols);
+    const info = nodeInfo.get(nodeId);
+    if (!info) return;
+
+    // First, recursively place all children
+    info.children.forEach(childId => {
+      this._placeSubtreeCompact(childId, nodeInfo, placements, rowOccupancy);
+    });
+
+    // Now place this node
+    let col;
+
+    if (info.children.length === 0) {
+      // Leaf node: find leftmost available column at this row
+      col = this._findLeftmostAvailable(info.rank, rowOccupancy);
+    } else {
+      // Parent node: center over children's actual positions
+      const childCols = info.children
+        .filter(childId => placements.has(childId))
+        .map(childId => placements.get(childId).col);
+
+      if (childCols.length > 0) {
+        const minCol = Math.min(...childCols);
+        const maxCol = Math.max(...childCols);
+        col = Math.floor((minCol + maxCol) / 2);
+
+        // If center is occupied, find nearest available
+        if (this._isOccupied(info.rank, col, rowOccupancy)) {
+          col = this._findNearestAvailable(info.rank, col, rowOccupancy);
+        }
+      } else {
+        // No children placed (shouldn't happen)
+        col = this._findLeftmostAvailable(info.rank, rowOccupancy);
+      }
+    }
+
+    // Mark as occupied
+    if (!rowOccupancy.has(info.rank)) {
+      rowOccupancy.set(info.rank, new Set());
+    }
+    rowOccupancy.get(info.rank).add(col);
 
     placements.set(nodeId, {
       row: info.rank,
       col: col,
-      blockStart: blockStart,
-      blockWidth: blockWidth
-    });
-
-    // Place children left-to-right within their portion of the block
-    let childBlockStart = blockStart;
-
-    info.children.forEach(childId => {
-      const childInfo = nodeInfo.get(childId);
-      if (!childInfo) return;
-
-      this._placeSubtree(childId, nodeInfo, placements, childBlockStart, childInfo.childWidth, gridCols);
-      childBlockStart += childInfo.childWidth;
+      blockStart: col,
+      blockWidth: 1
     });
   }
 
   /**
-   * Calculate center column within a block
-   * - For odd-width blocks: exact center
-   * - For even-width blocks: shift toward grid center (left on ties)
+   * Find the leftmost available column at a given row
    */
-  _centerInBlock(blockStart, blockWidth, gridCols) {
-    if (blockWidth === 1) {
-      return blockStart;
+  _findLeftmostAvailable(row, rowOccupancy) {
+    const occupied = rowOccupancy.get(row) || new Set();
+    let col = 0;
+    while (occupied.has(col)) {
+      col++;
     }
+    return col;
+  }
 
-    const blockCenter = blockStart + (blockWidth - 1) / 2;
-    const gridCenter = (gridCols - 1) / 2;
+  /**
+   * Check if a column is occupied at a given row
+   */
+  _isOccupied(row, col, rowOccupancy) {
+    const occupied = rowOccupancy.get(row) || new Set();
+    return occupied.has(col);
+  }
 
-    // If blockWidth is even, we need to choose between two middle cells
-    if (blockWidth % 2 === 0) {
-      const leftMiddle = blockStart + blockWidth / 2 - 1;
-      const rightMiddle = blockStart + blockWidth / 2;
+  /**
+   * Find nearest available column to the target
+   */
+  _findNearestAvailable(row, targetCol, rowOccupancy) {
+    const occupied = rowOccupancy.get(row) || new Set();
 
-      // Choose the one closer to grid center, prefer left on ties
-      const leftDist = Math.abs(leftMiddle - gridCenter);
-      const rightDist = Math.abs(rightMiddle - gridCenter);
-
-      return leftDist <= rightDist ? leftMiddle : rightMiddle;
+    // Search outward from target, prefer left on ties
+    for (let offset = 0; offset < 1000; offset++) {
+      if (targetCol - offset >= 0 && !occupied.has(targetCol - offset)) {
+        return targetCol - offset;
+      }
+      if (!occupied.has(targetCol + offset)) {
+        return targetCol + offset;
+      }
     }
+    return targetCol;
+  }
 
-    // Odd-width block: exact center
-    return blockStart + Math.floor(blockWidth / 2);
+  /**
+   * Center the tree by shifting all placements
+   */
+  _centerTree(placements, grid) {
+    if (placements.size === 0) return;
+
+    // Find current bounds
+    let minCol = Infinity, maxCol = -Infinity;
+    placements.forEach(p => {
+      if (p.col < minCol) minCol = p.col;
+      if (p.col > maxCol) maxCol = p.col;
+    });
+
+    const currentWidth = maxCol - minCol + 1;
+
+    // Calculate shift to center (shift so minCol becomes 0, centering happens at render)
+    const shift = -minCol;
+
+    // Apply shift to all placements
+    placements.forEach(p => {
+      p.col += shift;
+      p.blockStart = p.col;
+    });
+
+    // Update grid width
+    grid.cols = currentWidth;
   }
 
   /**
@@ -1243,6 +1302,151 @@ export class JourneyLayout {
     }
 
     return [exitPoint, entryPoint];
+  }
+
+  /**
+   * Step 10: Calculate label positions for edges
+   *
+   * Strategy:
+   * - Place labels as close to source as possible without overlapping
+   * - Process edges in order (by source row, then col) for consistent priority
+   * - Track occupied rectangles (nodes + placed labels)
+   * - For each edge, find first non-overlapping position along the path
+   */
+  _calculateLabelPositions(edgePaths, positions, nodes, placements) {
+    // Build list of occupied rectangles (all nodes)
+    const occupied = [];
+    positions.forEach((pos, nodeId) => {
+      const node = nodes.get(nodeId);
+      if (node) {
+        occupied.push({
+          left: pos.x,
+          right: pos.x + node.width,
+          top: pos.y,
+          bottom: pos.y + node.height,
+          type: 'node',
+          id: nodeId
+        });
+      }
+    });
+
+    // Sort edges by source position (top-to-bottom, left-to-right)
+    const sortedEdges = [...edgePaths].sort((a, b) => {
+      const aPlace = placements.get(a.source);
+      const bPlace = placements.get(b.source);
+      if (!aPlace || !bPlace) return 0;
+      if (aPlace.row !== bPlace.row) return aPlace.row - bPlace.row;
+      return aPlace.col - bPlace.col;
+    });
+
+    // Process each edge
+    sortedEdges.forEach(edge => {
+      if (!edge.label) {
+        edge.labelPoint = null;
+        return;
+      }
+
+      // Estimate label size (rough: 7px per char width, 16px height)
+      const labelWidth = edge.label.length * 7 + 8; // padding
+      const labelHeight = 16;
+
+      // Try positions along the edge path, starting near source
+      const position = this._findLabelPosition(
+        edge.points,
+        labelWidth,
+        labelHeight,
+        occupied
+      );
+
+      if (position) {
+        edge.labelPoint = position;
+
+        // Add this label to occupied rectangles
+        occupied.push({
+          left: position.x - labelWidth / 2,
+          right: position.x + labelWidth / 2,
+          top: position.y - labelHeight / 2,
+          bottom: position.y + labelHeight / 2,
+          type: 'label',
+          id: `${edge.source}->${edge.dest}`
+        });
+      } else {
+        // Fallback: midpoint (may overlap, but at least shows)
+        const midIdx = Math.floor(edge.points.length / 2);
+        const p1 = edge.points[midIdx];
+        const p2 = edge.points[Math.min(midIdx + 1, edge.points.length - 1)];
+        edge.labelPoint = {
+          x: (p1.x + p2.x) / 2,
+          y: (p1.y + p2.y) / 2
+        };
+      }
+    });
+  }
+
+  /**
+   * Find a non-overlapping position for a label along an edge path
+   * Returns {x, y} or null if no good position found
+   */
+  _findLabelPosition(points, labelWidth, labelHeight, occupied) {
+    if (points.length < 2) return null;
+
+    // Calculate total path length and segment info
+    const segments = [];
+    let totalLength = 0;
+
+    for (let i = 0; i < points.length - 1; i++) {
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      segments.push({ p1, p2, length, startDist: totalLength });
+      totalLength += length;
+    }
+
+    // Try positions from 10% to 90% along the path
+    // Start near source (low percentages) and work outward
+    const tryPercentages = [0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85];
+
+    for (const pct of tryPercentages) {
+      const targetDist = pct * totalLength;
+
+      // Find which segment contains this distance
+      let segment = segments[0];
+      for (const seg of segments) {
+        if (seg.startDist + seg.length >= targetDist) {
+          segment = seg;
+          break;
+        }
+      }
+
+      // Calculate point along this segment
+      const segDist = targetDist - segment.startDist;
+      const t = segment.length > 0 ? segDist / segment.length : 0;
+      const x = segment.p1.x + t * (segment.p2.x - segment.p1.x);
+      const y = segment.p1.y + t * (segment.p2.y - segment.p1.y);
+
+      // Check for overlap with occupied rectangles
+      const labelRect = {
+        left: x - labelWidth / 2 - 2,
+        right: x + labelWidth / 2 + 2,
+        top: y - labelHeight / 2 - 2,
+        bottom: y + labelHeight / 2 + 2
+      };
+
+      const hasOverlap = occupied.some(rect =>
+        labelRect.left < rect.right &&
+        labelRect.right > rect.left &&
+        labelRect.top < rect.bottom &&
+        labelRect.bottom > rect.top
+      );
+
+      if (!hasOverlap) {
+        return { x, y };
+      }
+    }
+
+    return null; // No good position found
   }
 }
 
