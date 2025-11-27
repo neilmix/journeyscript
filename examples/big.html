@@ -1201,7 +1201,7 @@ body {
       this._assignEdgeLanes(edgeRoutes, placements);
 
       // Step 6: Calculate traffic gutter sizes based on edge traversals
-      const gutterSizes = this._calculateGutterSizes(edgeRoutes, grid);
+      const gutterSizes = this._calculateGutterSizes(edgeRoutes, grid, placements);
 
       // Step 7: Convert grid positions to pixel coordinates (with gutters)
       const positions = this._gridToPixelsWithGutters(placements, nodeInfo, nodes, grid, gutterSizes);
@@ -2006,108 +2006,114 @@ body {
     }
 
     /**
-     * Step 5: Calculate gutter sizes based on edge traversals
+     * Step 6: Calculate gutter sizes based on lane assignments
      */
-    _calculateGutterSizes(edgeRoutes, grid) {
-      // Count traversals through each gutter
-      const hGutterCounts = new Array(grid.rows).fill(0);  // Horizontal gutters below each row
-      const vGutterCounts = new Array(grid.cols + 1).fill(0);  // Vertical gutters (left of each col + one on right)
+    _calculateGutterSizes(edgeRoutes, grid, placements) {
+      // Find the maximum lane number used in each gutter
+      const hGutterMaxLane = new Array(grid.rows).fill(-1);  // Horizontal gutters below each row
+      const vGutterMaxLane = new Array(grid.cols + 1).fill(-1);  // Vertical gutters
 
       edgeRoutes.forEach(route => {
-        route.path.forEach(segment => {
-          if (segment.type === 'hgutter-below') {
-            hGutterCounts[segment.row] = (hGutterCounts[segment.row] || 0) + 1;
-          } else if (segment.type === 'vgutter-left') {
-            vGutterCounts[segment.col] = (vGutterCounts[segment.col] || 0) + 1;
-          } else if (segment.type === 'vgutter-right') {
-            vGutterCounts[segment.col + 1] = (vGutterCounts[segment.col + 1] || 0) + 1;
+        if (!route.gutterLanes) return;
+
+        route.gutterLanes.forEach((lane, gutterKey) => {
+          if (gutterKey.startsWith('h:')) {
+            const row = parseInt(gutterKey.substring(2));
+            hGutterMaxLane[row] = Math.max(hGutterMaxLane[row], lane);
+          } else if (gutterKey.startsWith('v:')) {
+            const col = parseInt(gutterKey.substring(2));
+            vGutterMaxLane[col] = Math.max(vGutterMaxLane[col], lane);
           }
         });
+
+        // Routed edges also need vertical gutter space
+        // The vertical X position is determined by the lane in the first horizontal gutter
+        if (route.routeType === 'routed') {
+          const sourcePlacement = placements.get(route.source);
+          const destPlacement = placements.get(route.dest);
+          const goingDown = destPlacement.row > sourcePlacement.row;
+          const goingRight = destPlacement.col > sourcePlacement.col;
+
+          // Determine which vertical gutter this edge uses
+          const vGutterCol = goingRight ? sourcePlacement.col + 1 : sourcePlacement.col;
+
+          // Get the lane from the first horizontal gutter (used for vertical X positioning)
+          const exitGutterRow = goingDown ? sourcePlacement.row : sourcePlacement.row - 1;
+          const vGutterKey = `h:${exitGutterRow}`;
+          const lane = route.gutterLanes.get(vGutterKey) || 0;
+
+          vGutterMaxLane[vGutterCol] = Math.max(vGutterMaxLane[vGutterCol], lane);
+        }
       });
 
-      // Calculate sizes: (count + 1) * edgeSpacing, with minimum
-      const hGutterSizes = hGutterCounts.map(count =>
-        Math.max(this.options.minGutterSize, (count + 1) * this.options.edgeSpacing)
-      );
-      const vGutterSizes = vGutterCounts.map(count =>
-        Math.max(this.options.minGutterSize, (count + 1) * this.options.edgeSpacing)
-      );
+      // Calculate sizes: margin + (numLanes * edgeSpacing) + margin
+      // numLanes = maxLane + 1 (since lanes are 0-indexed)
+      // This ensures 20px margin on each side of the gutter
+      const margin = this.options.edgeSpacing;
+      const hGutterSizes = hGutterMaxLane.map(maxLane => {
+        const numLanes = maxLane + 1;
+        return Math.max(this.options.minGutterSize, margin + (numLanes * this.options.edgeSpacing) + margin);
+      });
+      const vGutterSizes = vGutterMaxLane.map(maxLane => {
+        const numLanes = maxLane + 1;
+        return Math.max(this.options.minGutterSize, margin + (numLanes * this.options.edgeSpacing) + margin);
+      });
 
       return { hGutterSizes, vGutterSizes };
     }
 
     /**
      * Step 5b: Assign lanes to edges that share gutter segments
-     * This prevents overlapping edges by offsetting them within the gutter
+     * Each edge gets a unique lane in each gutter it traverses
      */
     _assignEdgeLanes(edgeRoutes, placements) {
-      // Group edges by the gutter segments they use
+      // Track next available lane for each gutter
       // Key format: "h:row" for horizontal gutters, "v:col" for vertical gutters
-      const gutterEdges = new Map();
+      const gutterNextLane = new Map();
 
+      // Each route stores its lane per gutter
       edgeRoutes.forEach((route, routeIdx) => {
         if (route.routeType === 'direct-horizontal' || route.routeType === 'direct-vertical' || route.routeType === 'direct-diagonal') {
           route.lane = 0; // Direct routes don't need lanes
+          route.gutterLanes = new Map();
           return;
         }
 
-        // Find which gutters this route uses
-        const guttersUsed = new Set();
+        // Initialize per-gutter lane storage for this route
+        route.gutterLanes = new Map();
 
+        // Find which gutters this route uses and assign unique lanes
         route.path.forEach(segment => {
+          let gutterKey = null;
+
           if (segment.type === 'hgutter-below') {
-            guttersUsed.add(`h:${segment.row}`);
+            gutterKey = `h:${segment.row}`;
           } else if (segment.type === 'vgutter-left') {
-            guttersUsed.add(`v:${segment.col}`);
+            gutterKey = `v:${segment.col}`;
           } else if (segment.type === 'vgutter-right') {
-            guttersUsed.add(`v:${segment.col + 1}`);
+            gutterKey = `v:${segment.col + 1}`;
+          }
+
+          if (gutterKey && !route.gutterLanes.has(gutterKey)) {
+            // Get next available lane for this gutter
+            const lane = gutterNextLane.get(gutterKey) || 0;
+            gutterNextLane.set(gutterKey, lane + 1);
+
+            // Store this route's lane in this gutter
+            route.gutterLanes.set(gutterKey, lane);
           }
         });
 
-        guttersUsed.forEach(gutterKey => {
-          if (!gutterEdges.has(gutterKey)) {
-            gutterEdges.set(gutterKey, []);
-          }
-          gutterEdges.get(gutterKey).push({ route, routeIdx });
-        });
-      });
-
-      // Assign lanes within each gutter
-      gutterEdges.forEach((edges, gutterKey) => {
-        if (edges.length <= 1) {
-          edges.forEach(e => e.route.lane = 0);
-          return;
-        }
-
-        // Sort edges for consistent lane assignment
-        // Sort by: source row, then source col, then dest row, then dest col
-        edges.sort((a, b) => {
-          const aSource = placements.get(a.route.source);
-          const bSource = placements.get(b.route.source);
-          const aDest = placements.get(a.route.dest);
-          const bDest = placements.get(b.route.dest);
-
-          if (aSource.row !== bSource.row) return aSource.row - bSource.row;
-          if (aSource.col !== bSource.col) return aSource.col - bSource.col;
-          if (aDest.row !== bDest.row) return aDest.row - bDest.row;
-          return aDest.col - bDest.col;
-        });
-
-        // Assign lanes (centered around 0)
-        const numEdges = edges.length;
-        edges.forEach((e, idx) => {
-          // Center lanes around 0: for 3 edges, use -1, 0, 1
-          const lane = idx - Math.floor(numEdges / 2);
-          // Only update if this gives a larger absolute lane (some edges may be in multiple gutters)
-          if (e.route.lane === undefined || Math.abs(lane) > Math.abs(e.route.lane)) {
-            e.route.lane = lane;
-          }
-        });
+        // For backward compatibility, set route.lane to first gutter's lane (or 0)
+        route.lane = route.gutterLanes.size > 0
+          ? route.gutterLanes.values().next().value
+          : 0;
       });
 
       // Ensure all routes have a lane
       edgeRoutes.forEach(route => {
         if (route.lane === undefined) route.lane = 0;
+        if (!route.gutterLanes) route.gutterLanes = new Map();
       });
     }
 
@@ -2421,53 +2427,77 @@ body {
     _buildPixelPath(route, exitPoint, entryPoint, placements, rowY, colX, rowHeights, colWidths, hGutterSizes, vGutterSizes) {
       const sourcePlacement = placements.get(route.source);
       const destPlacement = placements.get(route.dest);
-      const laneOffset = (route.lane || 0) * this.options.edgeSpacing;
       const laneMargin = this.options.edgeSpacing; // Distance from gutter edge to lane
+      const gutterInset = 20; // Distance into gutter intersection for entry/exit points
+
+      // Helper to get lane offset for a specific gutter
+      const getLaneOffset = (gutterKey) => {
+        const lane = route.gutterLanes?.get(gutterKey) || 0;
+        return lane * this.options.edgeSpacing;
+      };
 
       // Helper to check if a side is a corner
       const isCorner = (side) => side && side.includes('-');
 
+      // Helper to get the nearest gutter intersection point, inset by gutterInset pixels
+      // For exit: find the corner of the gutter intersection nearest to the exit point
+      // For entry: find the corner of the gutter intersection nearest to the entry point
+      const getGutterIntersectionPoint = (point, placement, isExit, goingRight, goingDown) => {
+        // Horizontal gutter boundaries
+        const hGutterRow = goingDown ? placement.row : placement.row - 1;
+        const hGutterTop = rowY[hGutterRow] + rowHeights[hGutterRow];
+
+        // Vertical gutter boundaries
+        const vGutterCol = goingRight ? placement.col + 1 : placement.col;
+        let vGutterLeft, vGutterRight;
+        if (vGutterCol === 0) {
+          vGutterLeft = 0;
+          vGutterRight = colX[0];
+        } else if (vGutterCol > colX.length) {
+          vGutterLeft = colX[colX.length - 1] + colWidths[colWidths.length - 1];
+          vGutterRight = vGutterLeft + vGutterSizes[vGutterCol];
+        } else {
+          vGutterLeft = colX[vGutterCol - 1] + colWidths[vGutterCol - 1];
+          vGutterRight = colX[vGutterCol] !== undefined ? colX[vGutterCol] : vGutterLeft + vGutterSizes[vGutterCol];
+        }
+
+        // The intersection corner nearest to the node
+        const cornerX = goingRight ? vGutterLeft : vGutterRight;
+        const cornerY = goingDown ? hGutterTop : hGutterTop + hGutterSizes[hGutterRow];
+
+        // Inset 20px into the intersection (away from the node)
+        const insetX = goingRight ? cornerX + gutterInset : cornerX - gutterInset;
+        const insetY = goingDown ? cornerY + gutterInset : cornerY - gutterInset;
+
+        return { x: insetX, y: insetY };
+      };
+
       if (route.routeType === 'horizontal-via-gutter') {
         // Route through horizontal gutter below the row
+        const hGutterKey = `h:${sourcePlacement.row}`;
+        const laneOffset = getLaneOffset(hGutterKey);
         const gutterTop = rowY[sourcePlacement.row] + rowHeights[sourcePlacement.row];
         const laneY = gutterTop + laneMargin + laneOffset;
 
-        const exitIsCorner = isCorner(route.exitSide);
-        const entryIsCorner = isCorner(route.entrySide);
+        // Determine direction
+        const goingRight = entryPoint.x > exitPoint.x;
+        const goingDown = true; // horizontal-via-gutter always goes through gutter below
 
-        // For corners: diagonal means X changes as we go to the lane
-        // For sides: perpendicular means we go straight down/up to lane
-        let laneEntryX, laneExitX;
-
-        if (exitIsCorner) {
-          // Diagonal from corner: move X toward destination while going to lane Y
-          const xDistToLane = Math.abs(laneY - exitPoint.y);
-          const goingRight = entryPoint.x > exitPoint.x;
-          laneEntryX = goingRight ? exitPoint.x + xDistToLane : exitPoint.x - xDistToLane;
-        } else {
-          // Perpendicular from side: X stays same
-          laneEntryX = exitPoint.x;
-        }
-
-        if (entryIsCorner) {
-          // Diagonal to corner: X changes as we leave the lane
-          const xDistFromLane = Math.abs(entryPoint.y - laneY);
-          const comingFromLeft = laneEntryX < entryPoint.x;
-          laneExitX = comingFromLeft ? entryPoint.x - xDistFromLane : entryPoint.x + xDistFromLane;
-        } else {
-          // Perpendicular to side: X stays same as entry
-          laneExitX = entryPoint.x;
-        }
+        // Get inset points into nearest gutter intersections
+        const exitInset = getGutterIntersectionPoint(exitPoint, sourcePlacement, true, goingRight, goingDown);
+        const entryInset = getGutterIntersectionPoint(entryPoint, destPlacement, false, !goingRight, goingDown);
 
         return [
           exitPoint,
-          { x: laneEntryX, y: laneY },
-          { x: laneExitX, y: laneY },
+          { x: exitInset.x, y: laneY },
+          { x: entryInset.x, y: laneY },
           entryPoint
         ];
       } else if (route.routeType === 'vertical-via-gutter') {
         // Route through vertical gutter to left or right
         const useLeft = route.exitSide.includes('left');
+        const vGutterKey = useLeft ? `v:${sourcePlacement.col}` : `v:${sourcePlacement.col + 1}`;
+        const laneOffset = getLaneOffset(vGutterKey);
 
         let laneX;
         if (useLeft) {
@@ -2478,91 +2508,80 @@ body {
           laneX = gutterLeft + laneMargin + laneOffset;
         }
 
-        const exitIsCorner = isCorner(route.exitSide);
-        const entryIsCorner = isCorner(route.entrySide);
+        // Determine direction
+        const goingRight = !useLeft;
+        const goingDown = entryPoint.y > exitPoint.y;
 
-        let laneEntryY, laneExitY;
-
-        if (exitIsCorner) {
-          // Diagonal from corner: Y changes as we go to lane X
-          const yDistToLane = Math.abs(laneX - exitPoint.x);
-          const goingDown = entryPoint.y > exitPoint.y;
-          laneEntryY = goingDown ? exitPoint.y + yDistToLane : exitPoint.y - yDistToLane;
-        } else {
-          // Perpendicular from side: Y stays same
-          laneEntryY = exitPoint.y;
-        }
-
-        if (entryIsCorner) {
-          // Diagonal to corner: Y changes as we leave the lane
-          const yDistFromLane = Math.abs(entryPoint.x - laneX);
-          const comingFromAbove = laneEntryY < entryPoint.y;
-          laneExitY = comingFromAbove ? entryPoint.y - yDistFromLane : entryPoint.y + yDistFromLane;
-        } else {
-          // Perpendicular to side: Y stays same as entry
-          laneExitY = entryPoint.y;
-        }
+        // Get inset points into nearest gutter intersections
+        const exitInset = getGutterIntersectionPoint(exitPoint, sourcePlacement, true, goingRight, goingDown);
+        const entryInset = getGutterIntersectionPoint(entryPoint, destPlacement, false, goingRight, !goingDown);
 
         return [
           exitPoint,
-          { x: laneX, y: laneEntryY },
-          { x: laneX, y: laneExitY },
+          { x: laneX, y: exitInset.y },
+          { x: laneX, y: entryInset.y },
           entryPoint
         ];
       } else if (route.routeType === 'routed') {
-        // L-shaped route through vertical then horizontal gutter
+        // L-shaped route through horizontal gutters
+        // The "vertical" segment travels at an X position in the vertical gutter
+        // The "horizontal" segment travels through a horizontal gutter at dest row
         const goingDown = destPlacement.row > sourcePlacement.row;
         const goingRight = destPlacement.col > sourcePlacement.col;
 
-        // Vertical lane position
+        // Get lane offsets - use the first horizontal gutter for vertical X positioning
+        // This separates edges that share the vertical segment space
+        const exitGutterRow = goingDown ? sourcePlacement.row : sourcePlacement.row - 1;
+        const vGutterKey = `h:${exitGutterRow}`;
+        const vLaneOffset = getLaneOffset(vGutterKey);
+
+        // Get lane offset for the horizontal segment
+        const hGutterRow = goingDown ? destPlacement.row - 1 : destPlacement.row;
+        const hGutterKey = `h:${hGutterRow}`;
+        const hLaneOffset = getLaneOffset(hGutterKey);
+
+        // Vertical lane position - placed in the vertical gutter with margin from nodes
+        // Use vLaneOffset to separate edges that share the vertical path
         let vLaneX;
         if (goingRight) {
+          // Going right: use right gutter of source column
           const gutterLeft = colX[sourcePlacement.col] + colWidths[sourcePlacement.col];
-          vLaneX = gutterLeft + laneMargin + laneOffset;
+          vLaneX = gutterLeft + laneMargin + vLaneOffset;
         } else {
+          // Going left: use left gutter of source column
           const gutterRight = colX[sourcePlacement.col];
-          vLaneX = gutterRight - laneMargin - laneOffset;
+          vLaneX = gutterRight - laneMargin - vLaneOffset;
         }
 
         // Horizontal lane position
-        const hGutterRow = goingDown ? destPlacement.row - 1 : destPlacement.row;
         const hGutterTop = rowY[hGutterRow] + rowHeights[hGutterRow];
         const hGutterBottom = hGutterTop + hGutterSizes[hGutterRow];
         const hLaneY = goingDown
-          ? hGutterTop + laneMargin + laneOffset
-          : hGutterBottom - laneMargin - laneOffset;
+          ? hGutterTop + laneMargin + hLaneOffset
+          : hGutterBottom - laneMargin - hLaneOffset;
 
-        const exitIsCorner = isCorner(route.exitSide);
+        // Get inset points into nearest gutter intersections
+        const exitInset = getGutterIntersectionPoint(exitPoint, sourcePlacement, true, goingRight, goingDown);
+        const entryInset = getGutterIntersectionPoint(entryPoint, destPlacement, false, !goingRight, !goingDown);
+
         const entryIsCorner = isCorner(route.entrySide);
 
-        // Entry point to vertical lane
-        let vLaneEntryY;
-        if (exitIsCorner) {
-          // Diagonal from exit corner to vertical lane
-          const yDistToVLane = Math.abs(vLaneX - exitPoint.x);
-          vLaneEntryY = goingDown ? exitPoint.y + yDistToVLane : exitPoint.y - yDistToVLane;
-        } else {
-          vLaneEntryY = exitPoint.y;
-        }
-
-        // For the entry: if it's a corner, go diagonal directly from the lane corner (vLaneX, hLaneY)
-        // If it's a side, we need a horizontal segment first, then perpendicular
         if (entryIsCorner) {
-          // Diagonal from lane corner directly to entry corner
+          // Can go directly from lane corner to entry corner
           return [
             exitPoint,
-            { x: vLaneX, y: vLaneEntryY },    // Diagonal/perpendicular to vertical lane
-            { x: vLaneX, y: hLaneY },          // Straight along vertical lane to lane corner
-            entryPoint                          // Diagonal from lane corner to entry corner
+            { x: vLaneX, y: exitInset.y },      // Slant to vertical lane
+            { x: vLaneX, y: hLaneY },            // Along vertical lane
+            entryPoint                           // Slant to entry corner
           ];
         } else {
           // Need horizontal segment, then perpendicular to side
           return [
             exitPoint,
-            { x: vLaneX, y: vLaneEntryY },    // Diagonal/perpendicular to vertical lane
-            { x: vLaneX, y: hLaneY },          // Straight along vertical lane to lane corner
-            { x: entryPoint.x, y: hLaneY },   // Straight along horizontal lane
-            entryPoint                          // Perpendicular to entry side
+            { x: vLaneX, y: exitInset.y },      // Slant to vertical lane
+            { x: vLaneX, y: hLaneY },            // Along vertical lane
+            { x: entryInset.x, y: hLaneY },     // Along horizontal lane
+            entryPoint                           // Slant to entry side
           ];
         }
       }
