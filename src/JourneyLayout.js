@@ -253,25 +253,43 @@ export class JourneyLayout {
   }
 
   /**
-   * Place a subtree compactly: children first, then parent centered over them
+   * Place a subtree compactly: children first (in source order), then parent centered over them.
+   *
+   * Source order is enforced PER ROW: at any given row, siblings appear left-to-right in
+   * declaration order. But siblings at different rows can share columns (compactness).
+   *
+   * @param {string} nodeId - The node to place
+   * @param {Map} nodeInfo - Node information map
+   * @param {Map} placements - Map of placed nodes
+   * @param {Map} rowOccupancy - Map of row -> Set of occupied columns
+   * @param {Map} siblingMinCols - Map of row -> minimum column for next sibling (source order)
    */
-  _placeSubtreeCompact(nodeId, nodeInfo, placements, rowOccupancy) {
+  _placeSubtreeCompact(nodeId, nodeInfo, placements, rowOccupancy, siblingMinCols = new Map()) {
     if (placements.has(nodeId)) return;
 
     const info = nodeInfo.get(nodeId);
     if (!info) return;
 
-    // First, recursively place all children
+    // For this node's children, track per-row minimums to enforce source order among them
+    const childSiblingMins = new Map();
+
+    // First, recursively place all children IN SOURCE ORDER
     info.children.forEach(childId => {
-      this._placeSubtreeCompact(childId, nodeInfo, placements, rowOccupancy);
+      this._placeSubtreeCompact(childId, nodeInfo, placements, rowOccupancy, childSiblingMins);
+
+      // After placing this child's subtree, update minimums for next sibling
+      // The next sibling (at any row) must be to the right of this sibling at the same row
+      this._updateSiblingMins(childId, nodeInfo, placements, childSiblingMins);
     });
 
     // Now place this node
     let col;
+    const minColAtRow = siblingMinCols.get(info.rank) || 0;
 
     if (info.children.length === 0) {
       // Leaf node: find leftmost available column at this row
-      col = this._findLeftmostAvailable(info.rank, rowOccupancy);
+      // Must be >= minColAtRow (source order) and not occupied
+      col = this._findLeftmostAvailableFrom(info.rank, minColAtRow, rowOccupancy);
     } else {
       // Parent node: center over children's actual positions
       const childCols = info.children
@@ -279,17 +297,19 @@ export class JourneyLayout {
         .map(childId => placements.get(childId).col);
 
       if (childCols.length > 0) {
-        const minCol = Math.min(...childCols);
-        const maxCol = Math.max(...childCols);
-        col = Math.floor((minCol + maxCol) / 2);
+        const minChildCol = Math.min(...childCols);
+        const maxChildCol = Math.max(...childCols);
+        col = Math.floor((minChildCol + maxChildCol) / 2);
 
-        // If center is occupied, find nearest available
+        // Ensure we respect source order minimum
+        col = Math.max(col, minColAtRow);
+
+        // If occupied, find nearest available (prefer staying close to center)
         if (this._isOccupied(info.rank, col, rowOccupancy)) {
-          col = this._findNearestAvailable(info.rank, col, rowOccupancy);
+          col = this._findNearestAvailableFrom(info.rank, col, minColAtRow, rowOccupancy);
         }
       } else {
-        // No children placed (shouldn't happen)
-        col = this._findLeftmostAvailable(info.rank, rowOccupancy);
+        col = this._findLeftmostAvailableFrom(info.rank, minColAtRow, rowOccupancy);
       }
     }
 
@@ -308,11 +328,37 @@ export class JourneyLayout {
   }
 
   /**
-   * Find the leftmost available column at a given row
+   * After placing a subtree, update sibling minimums so next sibling respects source order.
+   * For each row where this subtree has a node, the next sibling must be to the right.
    */
-  _findLeftmostAvailable(row, rowOccupancy) {
+  _updateSiblingMins(nodeId, nodeInfo, placements, siblingMinCols) {
+    const visited = new Set();
+    const queue = [nodeId];
+
+    while (queue.length > 0) {
+      const id = queue.shift();
+      if (visited.has(id)) continue;
+      visited.add(id);
+
+      const placement = placements.get(id);
+      if (placement) {
+        const currentMin = siblingMinCols.get(placement.row) || 0;
+        siblingMinCols.set(placement.row, Math.max(currentMin, placement.col + 1));
+      }
+
+      const info = nodeInfo.get(id);
+      if (info) {
+        info.children.forEach(childId => queue.push(childId));
+      }
+    }
+  }
+
+  /**
+   * Find the leftmost available column at a given row, starting from a minimum column
+   */
+  _findLeftmostAvailableFrom(row, minCol, rowOccupancy) {
     const occupied = rowOccupancy.get(row) || new Set();
-    let col = 0;
+    let col = minCol;
     while (occupied.has(col)) {
       col++;
     }
@@ -331,18 +377,27 @@ export class JourneyLayout {
    * Find nearest available column to the target
    */
   _findNearestAvailable(row, targetCol, rowOccupancy) {
+    return this._findNearestAvailableFrom(row, targetCol, 0, rowOccupancy);
+  }
+
+  /**
+   * Find nearest available column to the target, respecting a minimum column
+   */
+  _findNearestAvailableFrom(row, targetCol, minCol, rowOccupancy) {
     const occupied = rowOccupancy.get(row) || new Set();
 
-    // Search outward from target, prefer left on ties
+    // Search outward from target, but never go below minCol
     for (let offset = 0; offset < 1000; offset++) {
-      if (targetCol - offset >= 0 && !occupied.has(targetCol - offset)) {
+      // Try left first (if above minimum)
+      if (targetCol - offset >= minCol && !occupied.has(targetCol - offset)) {
         return targetCol - offset;
       }
+      // Try right
       if (!occupied.has(targetCol + offset)) {
         return targetCol + offset;
       }
     }
-    return targetCol;
+    return Math.max(targetCol, minCol);
   }
 
   /**
