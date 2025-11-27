@@ -30,7 +30,6 @@ export class JourneyVisualizer {
         step: 0.03
       },
       arrows: {
-        showLabels: true,
         color: '#333',
         width: 2
       },
@@ -259,38 +258,6 @@ export class JourneyVisualizer {
       }
 
       this.svgOverlay.appendChild(path);
-
-      // Draw label if present (using pre-computed labelPoint)
-      if (this.options.arrows.showLabels && edge.label && edge.labelPoint) {
-        const labelX = edge.labelPoint.x + padding;
-        const labelY = edge.labelPoint.y + padding;
-        const bbox = { width: edge.label.length * 7, height: 16 };
-
-        // Add white background for readability
-        const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        bgRect.setAttribute('x', labelX - bbox.width / 2 - 4);
-        bgRect.setAttribute('y', labelY - bbox.height / 2 - 2);
-        bgRect.setAttribute('width', bbox.width + 8);
-        bgRect.setAttribute('height', bbox.height + 4);
-        bgRect.setAttribute('fill', 'white');
-        bgRect.setAttribute('stroke', '#ccc');
-        bgRect.setAttribute('stroke-width', '1');
-        bgRect.setAttribute('rx', '3');
-
-        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('x', labelX);
-        text.setAttribute('y', labelY);
-        text.setAttribute('class', 'arrow-label');
-        text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('dominant-baseline', 'middle');
-        text.setAttribute('fill', this.options.arrows.color);
-        text.setAttribute('font-size', '12px');
-        text.setAttribute('font-family', 'system-ui, sans-serif');
-        text.textContent = edge.label;
-
-        this.svgOverlay.appendChild(bgRect);
-        this.svgOverlay.appendChild(text);
-      }
     });
   }
 

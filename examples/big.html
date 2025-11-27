@@ -1212,9 +1212,6 @@ body {
       // Step 9: Convert edge routes to pixel paths (with lane-based routing)
       const edgePaths = this._edgeRoutesToPixelPaths(edgeRoutes, placements, positions, nodes, grid, gutterSizes);
 
-      // Step 10: Calculate label positions (avoiding overlaps with nodes and other labels)
-      this._calculateLabelPositions(edgePaths, positions, nodes, placements);
-
       // Calculate bounds
       const bounds = this._calculateBounds(positions, nodes);
 
@@ -1368,27 +1365,30 @@ body {
     /**
      * Step 3: Place nodes in grid cells with compact centering
      *
-     * Algorithm:
-     * 1. Process nodes by rank, starting from deepest (bottom-up)
-     * 2. For each subtree, place children first using greedy left-packing with collision detection
-     * 3. Then place parent centered over children's actual positions
-     * 4. Collision detection is per-row, allowing vertical space sharing
-     *
-     * This allows leaf nodes at shallow depths to share vertical space with deeper subtrees.
+     * Two-phase algorithm:
+     * Phase 1: "Wide" placement using lane-based algorithm (guarantees no collisions)
+     *          Each subtree gets exclusive horizontal space based on its maximum width.
+     * Phase 2: "Compact" by recursively pulling siblings toward center
+     *          Work from center sibling outward, shifting subtrees inward as much as possible.
      */
     _placeNodesInGrid(nodeInfoData, grid, roots, adjacency) {
       const { nodeInfo } = nodeInfoData;
       const placements = new Map();
 
-      // Track occupied columns per row for collision detection
-      const rowOccupancy = new Map(); // row -> Set of occupied columns
-
-      // Process each root subtree
+      // Phase 1: Wide placement (lane-based, no collisions)
+      let nextCol = 0;
       roots.forEach(rootId => {
-        this._placeSubtreeCompact(rootId, nodeInfo, placements, rowOccupancy);
+        const width = this._calculateSubtreeWidth(rootId, nodeInfo);
+        this._placeSubtreeWide(rootId, nodeInfo, placements, nextCol, width);
+        nextCol += width;
       });
 
-      // Calculate grid dimensions and center the tree
+      // Phase 2: Compact toward center (depth-first, bottom-up)
+      roots.forEach(rootId => {
+        this._compactSubtree(rootId, nodeInfo, placements);
+      });
+
+      // Calculate grid dimensions
       let maxCol = 0;
       placements.forEach(p => {
         if (p.col > maxCol) maxCol = p.col;
@@ -1402,151 +1402,213 @@ body {
     }
 
     /**
-     * Place a subtree compactly: children first (in source order), then parent centered over them.
-     *
-     * Source order is enforced PER ROW: at any given row, siblings appear left-to-right in
-     * declaration order. But siblings at different rows can share columns (compactness).
-     *
-     * @param {string} nodeId - The node to place
-     * @param {Map} nodeInfo - Node information map
-     * @param {Map} placements - Map of placed nodes
-     * @param {Map} rowOccupancy - Map of row -> Set of occupied columns
-     * @param {Map} siblingMinCols - Map of row -> minimum column for next sibling (source order)
+     * Calculate the width needed for a subtree (max width at any level)
      */
-    _placeSubtreeCompact(nodeId, nodeInfo, placements, rowOccupancy, siblingMinCols = new Map()) {
+    _calculateSubtreeWidth(nodeId, nodeInfo, visited = new Set()) {
+      if (visited.has(nodeId)) return 0;
+      visited.add(nodeId);
+
+      const info = nodeInfo.get(nodeId);
+      if (!info) return 1;
+
+      if (info.children.length === 0) {
+        return 1;
+      }
+
+      // Width is sum of children's widths (they sit side by side)
+      let totalWidth = 0;
+      info.children.forEach(childId => {
+        totalWidth += this._calculateSubtreeWidth(childId, nodeInfo, visited);
+      });
+
+      return Math.max(1, totalWidth);
+    }
+
+    /**
+     * Phase 1: Place subtree in "wide" mode - each node centered in its allocated lane
+     */
+    _placeSubtreeWide(nodeId, nodeInfo, placements, laneStart, laneWidth) {
       if (placements.has(nodeId)) return;
 
       const info = nodeInfo.get(nodeId);
       if (!info) return;
 
-      // For this node's children, track per-row minimums to enforce source order among them
-      const childSiblingMins = new Map();
-
-      // First, recursively place all children IN SOURCE ORDER
-      info.children.forEach(childId => {
-        this._placeSubtreeCompact(childId, nodeInfo, placements, rowOccupancy, childSiblingMins);
-
-        // After placing this child's subtree, update minimums for next sibling
-        // The next sibling (at any row) must be to the right of this sibling at the same row
-        this._updateSiblingMins(childId, nodeInfo, placements, childSiblingMins);
-      });
-
-      // Now place this node
-      let col;
-      const minColAtRow = siblingMinCols.get(info.rank) || 0;
-
-      if (info.children.length === 0) {
-        // Leaf node: find leftmost available column at this row
-        // Must be >= minColAtRow (source order) and not occupied
-        col = this._findLeftmostAvailableFrom(info.rank, minColAtRow, rowOccupancy);
-      } else {
-        // Parent node: center over children's actual positions
-        const childCols = info.children
-          .filter(childId => placements.has(childId))
-          .map(childId => placements.get(childId).col);
-
-        if (childCols.length > 0) {
-          const minChildCol = Math.min(...childCols);
-          const maxChildCol = Math.max(...childCols);
-          col = Math.floor((minChildCol + maxChildCol) / 2);
-
-          // Ensure we respect source order minimum
-          col = Math.max(col, minColAtRow);
-
-          // If occupied, find nearest available (prefer staying close to center)
-          if (this._isOccupied(info.rank, col, rowOccupancy)) {
-            col = this._findNearestAvailableFrom(info.rank, col, minColAtRow, rowOccupancy);
-          }
-        } else {
-          col = this._findLeftmostAvailableFrom(info.rank, minColAtRow, rowOccupancy);
-        }
-      }
-
-      // Mark as occupied
-      if (!rowOccupancy.has(info.rank)) {
-        rowOccupancy.set(info.rank, new Set());
-      }
-      rowOccupancy.get(info.rank).add(col);
+      // Place this node centered in its lane
+      const col = laneStart + Math.floor((laneWidth - 1) / 2);
 
       placements.set(nodeId, {
         row: info.rank,
         col: col,
-        blockStart: col,
-        blockWidth: 1
+        blockStart: laneStart,
+        blockWidth: laneWidth
+      });
+
+      // Place children in their sub-lanes
+      let childLaneStart = laneStart;
+      info.children.forEach(childId => {
+        const childWidth = this._calculateSubtreeWidth(childId, nodeInfo, new Set());
+        this._placeSubtreeWide(childId, nodeInfo, placements, childLaneStart, childWidth);
+        childLaneStart += childWidth;
       });
     }
 
     /**
-     * After placing a subtree, update sibling minimums so next sibling respects source order.
-     * For each row where this subtree has a node, the next sibling must be to the right.
+     * Phase 2: Compact a subtree by pulling siblings toward center
+     *
+     * Recursively compacts children first (bottom-up), then compacts this level's children
+     * toward the center sibling.
      */
-    _updateSiblingMins(nodeId, nodeInfo, placements, siblingMinCols) {
-      const visited = new Set();
-      const queue = [nodeId];
+    _compactSubtree(nodeId, nodeInfo, placements) {
+      const info = nodeInfo.get(nodeId);
+      if (!info || info.children.length === 0) return;
 
-      while (queue.length > 0) {
-        const id = queue.shift();
-        if (visited.has(id)) continue;
-        visited.add(id);
+      // First, recursively compact all children's subtrees (bottom-up)
+      info.children.forEach(childId => {
+        this._compactSubtree(childId, nodeInfo, placements);
+      });
 
-        const placement = placements.get(id);
-        if (placement) {
-          const currentMin = siblingMinCols.get(placement.row) || 0;
-          siblingMinCols.set(placement.row, Math.max(currentMin, placement.col + 1));
+      // Now compact this node's children toward center
+      if (info.children.length > 1) {
+        this._compactChildrenTowardCenter(info.children, nodeInfo, placements);
+      }
+
+      // Re-center this node over its children
+      this._recenterOverChildren(nodeId, info.children, placements);
+    }
+
+    /**
+     * Compact children toward the center sibling
+     */
+    _compactChildrenTowardCenter(children, nodeInfo, placements) {
+      const n = children.length;
+      if (n <= 1) return;
+
+      // Find center index (for odd n, exact center; for even n, left-of-center)
+      const centerIndex = Math.floor((n - 1) / 2);
+
+      // Compact right-of-center siblings leftward (from center+1 outward to right)
+      for (let i = centerIndex + 1; i < n; i++) {
+        const siblingId = children[i];
+        const leftNeighborId = children[i - 1];
+
+        // Find minimum gap between this subtree and the subtree to its left
+        const minGap = this._findMinGapBetweenSubtrees(leftNeighborId, siblingId, nodeInfo, placements);
+
+        // Shift this subtree left by (minGap - 1) to leave exactly 1 column gap
+        if (minGap > 1) {
+          this._shiftSubtree(siblingId, nodeInfo, placements, -(minGap - 1));
         }
+      }
 
-        const info = nodeInfo.get(id);
-        if (info) {
-          info.children.forEach(childId => queue.push(childId));
+      // Compact left-of-center siblings rightward (from center-1 outward to left)
+      for (let i = centerIndex - 1; i >= 0; i--) {
+        const siblingId = children[i];
+        const rightNeighborId = children[i + 1];
+
+        // Find minimum gap between this subtree and the subtree to its right
+        const minGap = this._findMinGapBetweenSubtrees(siblingId, rightNeighborId, nodeInfo, placements);
+
+        // Shift this subtree right by (minGap - 1) to leave exactly 1 column gap
+        if (minGap > 1) {
+          this._shiftSubtree(siblingId, nodeInfo, placements, minGap - 1);
         }
       }
     }
 
     /**
-     * Find the leftmost available column at a given row, starting from a minimum column
+     * Find minimum column gap between two subtrees (left subtree's right edge to right subtree's left edge)
      */
-    _findLeftmostAvailableFrom(row, minCol, rowOccupancy) {
-      const occupied = rowOccupancy.get(row) || new Set();
-      let col = minCol;
-      while (occupied.has(col)) {
-        col++;
-      }
-      return col;
-    }
+    _findMinGapBetweenSubtrees(leftRootId, rightRootId, nodeInfo, placements) {
+      // Get all nodes in each subtree with their placements
+      const leftNodes = this._getSubtreeNodes(leftRootId, nodeInfo);
+      const rightNodes = this._getSubtreeNodes(rightRootId, nodeInfo);
 
-    /**
-     * Check if a column is occupied at a given row
-     */
-    _isOccupied(row, col, rowOccupancy) {
-      const occupied = rowOccupancy.get(row) || new Set();
-      return occupied.has(col);
-    }
-
-    /**
-     * Find nearest available column to the target
-     */
-    _findNearestAvailable(row, targetCol, rowOccupancy) {
-      return this._findNearestAvailableFrom(row, targetCol, 0, rowOccupancy);
-    }
-
-    /**
-     * Find nearest available column to the target, respecting a minimum column
-     */
-    _findNearestAvailableFrom(row, targetCol, minCol, rowOccupancy) {
-      const occupied = rowOccupancy.get(row) || new Set();
-
-      // Search outward from target, but never go below minCol
-      for (let offset = 0; offset < 1000; offset++) {
-        // Try left first (if above minimum)
-        if (targetCol - offset >= minCol && !occupied.has(targetCol - offset)) {
-          return targetCol - offset;
+      // Build a map of row -> rightmost column in left subtree
+      const leftRightmost = new Map();
+      leftNodes.forEach(id => {
+        const p = placements.get(id);
+        if (p) {
+          const current = leftRightmost.get(p.row) ?? -Infinity;
+          leftRightmost.set(p.row, Math.max(current, p.col));
         }
-        // Try right
-        if (!occupied.has(targetCol + offset)) {
-          return targetCol + offset;
+      });
+
+      // Build a map of row -> leftmost column in right subtree
+      const rightLeftmost = new Map();
+      rightNodes.forEach(id => {
+        const p = placements.get(id);
+        if (p) {
+          const current = rightLeftmost.get(p.row) ?? Infinity;
+          rightLeftmost.set(p.row, Math.min(current, p.col));
         }
+      });
+
+      // Find minimum gap across all rows where both subtrees have nodes
+      let minGap = Infinity;
+      leftRightmost.forEach((leftCol, row) => {
+        const rightCol = rightLeftmost.get(row);
+        if (rightCol !== undefined) {
+          const gap = rightCol - leftCol;
+          minGap = Math.min(minGap, gap);
+        }
+      });
+
+      return minGap === Infinity ? 1 : minGap;
+    }
+
+    /**
+     * Get all node IDs in a subtree
+     */
+    _getSubtreeNodes(nodeId, nodeInfo, result = new Set()) {
+      if (result.has(nodeId)) return result;
+      result.add(nodeId);
+
+      const info = nodeInfo.get(nodeId);
+      if (info) {
+        info.children.forEach(childId => {
+          this._getSubtreeNodes(childId, nodeInfo, result);
+        });
       }
-      return Math.max(targetCol, minCol);
+
+      return result;
+    }
+
+    /**
+     * Shift all nodes in a subtree by a delta
+     */
+    _shiftSubtree(nodeId, nodeInfo, placements, delta) {
+      const nodes = this._getSubtreeNodes(nodeId, nodeInfo);
+      nodes.forEach(id => {
+        const p = placements.get(id);
+        if (p) {
+          p.col += delta;
+          p.blockStart += delta;
+        }
+      });
+    }
+
+    /**
+     * Re-center a parent node over its children after compaction
+     */
+    _recenterOverChildren(nodeId, children, placements) {
+      if (children.length === 0) return;
+
+      const childCols = children
+        .map(id => placements.get(id))
+        .filter(p => p)
+        .map(p => p.col);
+
+      if (childCols.length === 0) return;
+
+      const minCol = Math.min(...childCols);
+      const maxCol = Math.max(...childCols);
+      const centerCol = Math.floor((minCol + maxCol) / 2);
+
+      const placement = placements.get(nodeId);
+      if (placement) {
+        placement.col = centerCol;
+        placement.blockStart = centerCol;
+      }
     }
 
     /**
@@ -2507,151 +2569,6 @@ body {
 
       return [exitPoint, entryPoint];
     }
-
-    /**
-     * Step 10: Calculate label positions for edges
-     *
-     * Strategy:
-     * - Place labels as close to source as possible without overlapping
-     * - Process edges in order (by source row, then col) for consistent priority
-     * - Track occupied rectangles (nodes + placed labels)
-     * - For each edge, find first non-overlapping position along the path
-     */
-    _calculateLabelPositions(edgePaths, positions, nodes, placements) {
-      // Build list of occupied rectangles (all nodes)
-      const occupied = [];
-      positions.forEach((pos, nodeId) => {
-        const node = nodes.get(nodeId);
-        if (node) {
-          occupied.push({
-            left: pos.x,
-            right: pos.x + node.width,
-            top: pos.y,
-            bottom: pos.y + node.height,
-            type: 'node',
-            id: nodeId
-          });
-        }
-      });
-
-      // Sort edges by source position (top-to-bottom, left-to-right)
-      const sortedEdges = [...edgePaths].sort((a, b) => {
-        const aPlace = placements.get(a.source);
-        const bPlace = placements.get(b.source);
-        if (!aPlace || !bPlace) return 0;
-        if (aPlace.row !== bPlace.row) return aPlace.row - bPlace.row;
-        return aPlace.col - bPlace.col;
-      });
-
-      // Process each edge
-      sortedEdges.forEach(edge => {
-        if (!edge.label) {
-          edge.labelPoint = null;
-          return;
-        }
-
-        // Estimate label size (rough: 7px per char width, 16px height)
-        const labelWidth = edge.label.length * 7 + 8; // padding
-        const labelHeight = 16;
-
-        // Try positions along the edge path, starting near source
-        const position = this._findLabelPosition(
-          edge.points,
-          labelWidth,
-          labelHeight,
-          occupied
-        );
-
-        if (position) {
-          edge.labelPoint = position;
-
-          // Add this label to occupied rectangles
-          occupied.push({
-            left: position.x - labelWidth / 2,
-            right: position.x + labelWidth / 2,
-            top: position.y - labelHeight / 2,
-            bottom: position.y + labelHeight / 2,
-            type: 'label',
-            id: `${edge.source}->${edge.dest}`
-          });
-        } else {
-          // Fallback: midpoint (may overlap, but at least shows)
-          const midIdx = Math.floor(edge.points.length / 2);
-          const p1 = edge.points[midIdx];
-          const p2 = edge.points[Math.min(midIdx + 1, edge.points.length - 1)];
-          edge.labelPoint = {
-            x: (p1.x + p2.x) / 2,
-            y: (p1.y + p2.y) / 2
-          };
-        }
-      });
-    }
-
-    /**
-     * Find a non-overlapping position for a label along an edge path
-     * Returns {x, y} or null if no good position found
-     */
-    _findLabelPosition(points, labelWidth, labelHeight, occupied) {
-      if (points.length < 2) return null;
-
-      // Calculate total path length and segment info
-      const segments = [];
-      let totalLength = 0;
-
-      for (let i = 0; i < points.length - 1; i++) {
-        const p1 = points[i];
-        const p2 = points[i + 1];
-        const dx = p2.x - p1.x;
-        const dy = p2.y - p1.y;
-        const length = Math.sqrt(dx * dx + dy * dy);
-        segments.push({ p1, p2, length, startDist: totalLength });
-        totalLength += length;
-      }
-
-      // Try positions from 10% to 90% along the path
-      // Start near source (low percentages) and work outward
-      const tryPercentages = [0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85];
-
-      for (const pct of tryPercentages) {
-        const targetDist = pct * totalLength;
-
-        // Find which segment contains this distance
-        let segment = segments[0];
-        for (const seg of segments) {
-          if (seg.startDist + seg.length >= targetDist) {
-            segment = seg;
-            break;
-          }
-        }
-
-        // Calculate point along this segment
-        const segDist = targetDist - segment.startDist;
-        const t = segment.length > 0 ? segDist / segment.length : 0;
-        const x = segment.p1.x + t * (segment.p2.x - segment.p1.x);
-        const y = segment.p1.y + t * (segment.p2.y - segment.p1.y);
-
-        // Check for overlap with occupied rectangles
-        const labelRect = {
-          left: x - labelWidth / 2 - 2,
-          right: x + labelWidth / 2 + 2,
-          top: y - labelHeight / 2 - 2,
-          bottom: y + labelHeight / 2 + 2
-        };
-
-        const hasOverlap = occupied.some(rect =>
-          labelRect.left < rect.right &&
-          labelRect.right > rect.left &&
-          labelRect.top < rect.bottom &&
-          labelRect.bottom > rect.top
-        );
-
-        if (!hasOverlap) {
-          return { x, y };
-        }
-      }
-
-      return null; // No good position found
-    }
   }
 
   // src/ZoomPanController.js
@@ -2931,7 +2848,6 @@ body {
           step: 0.03
         },
         arrows: {
-          showLabels: true,
           color: '#333',
           width: 2
         },
@@ -3160,38 +3076,6 @@ body {
         }
 
         this.svgOverlay.appendChild(path);
-
-        // Draw label if present (using pre-computed labelPoint)
-        if (this.options.arrows.showLabels && edge.label && edge.labelPoint) {
-          const labelX = edge.labelPoint.x + padding;
-          const labelY = edge.labelPoint.y + padding;
-          const bbox = { width: edge.label.length * 7, height: 16 };
-
-          // Add white background for readability
-          const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          bgRect.setAttribute('x', labelX - bbox.width / 2 - 4);
-          bgRect.setAttribute('y', labelY - bbox.height / 2 - 2);
-          bgRect.setAttribute('width', bbox.width + 8);
-          bgRect.setAttribute('height', bbox.height + 4);
-          bgRect.setAttribute('fill', 'white');
-          bgRect.setAttribute('stroke', '#ccc');
-          bgRect.setAttribute('stroke-width', '1');
-          bgRect.setAttribute('rx', '3');
-
-          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          text.setAttribute('x', labelX);
-          text.setAttribute('y', labelY);
-          text.setAttribute('class', 'arrow-label');
-          text.setAttribute('text-anchor', 'middle');
-          text.setAttribute('dominant-baseline', 'middle');
-          text.setAttribute('fill', this.options.arrows.color);
-          text.setAttribute('font-size', '12px');
-          text.setAttribute('font-family', 'system-ui, sans-serif');
-          text.textContent = edge.label;
-
-          this.svgOverlay.appendChild(bgRect);
-          this.svgOverlay.appendChild(text);
-        }
       });
     }
 

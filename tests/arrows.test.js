@@ -43,37 +43,4 @@ describe('Arrow Drawing', () => {
 
     expect(arrow.getAttribute('marker-end')).toBe('url(#arrowhead)');
   });
-
-  it('should draw labels when showLabels is true', () => {
-    const visualizer = new JourneyVisualizer('.journey-container', {
-      arrows: { showLabels: true }
-    });
-    visualizer._discoverSteps();
-    visualizer._buildGraph();
-    visualizer._computeLayout();
-    visualizer._positionSteps();
-    visualizer._createSvgOverlay(800, 600);
-    visualizer._drawArrows();
-
-    const labels = visualizer.svgOverlay.querySelectorAll('text.arrow-label');
-
-    expect(labels.length).toBe(1);
-    expect(labels[0].textContent).toBe('Next Step');
-  });
-
-  it('should not draw labels when showLabels is false', () => {
-    const visualizer = new JourneyVisualizer('.journey-container', {
-      arrows: { showLabels: false }
-    });
-    visualizer._discoverSteps();
-    visualizer._buildGraph();
-    visualizer._computeLayout();
-    visualizer._positionSteps();
-    visualizer._createSvgOverlay(800, 600);
-    visualizer._drawArrows();
-
-    const labels = visualizer.svgOverlay.querySelectorAll('text.arrow-label');
-
-    expect(labels.length).toBe(0);
-  });
 });
