@@ -1080,10 +1080,15 @@ export class JourneyLayout {
    *
    * Key constraint: ALL points must remain ON the node's edge (not offset into space)
    *
-   * Sorting for corners (from original spec):
-   * - same column first, by largest rank difference to smallest
-   * - then by largest rank difference to smallest
-   * - then by largest column difference to smallest
+   * Sorting for corners:
+   * Fan order from vertical edge to horizontal edge:
+   * 1. Left-of-node connections: shortest vertical distance first, then longest
+   * 2. Right-of-node connections: longest vertical distance first, then shortest
+   *
+   * First tiebreaker (same vertical distance): longest horizontal distance first
+   *
+   * Second tiebreaker (same vertical AND horizontal distance): reversed for
+   * top vs bottom corners to prevent cyclical edges from crossing.
    */
   _assignCornerOffsets(edgeRoutes, positions, nodes, placements) {
     // Group edges by their connection point (node + side)
@@ -1118,9 +1123,9 @@ export class JourneyLayout {
       const [nodeId, side] = key.split(':');
       const node = nodes.get(nodeId);
       const isCorner = side.includes('-'); // e.g., 'bottom-right'
+      const isBottomCorner = side.includes('bottom');
 
-      // Sort connections per the spec:
-      // For corners: same column first (by rank diff), then by rank diff, then by col diff
+      // Sort connections - different logic for corners vs straight sides
       connections.sort((a, b) => {
         const aOther = a.type === 'exit' ? a.route.dest : a.route.source;
         const bOther = b.type === 'exit' ? b.route.dest : b.route.source;
@@ -1135,18 +1140,54 @@ export class JourneyLayout {
         const bRankDiff = Math.abs(bPlace.row - thisPlace.row);
         const aColDiff = Math.abs(aPlace.col - thisPlace.col);
         const bColDiff = Math.abs(bPlace.col - thisPlace.col);
-        const aSameCol = aPlace.col === thisPlace.col;
-        const bSameCol = bPlace.col === thisPlace.col;
 
-        // Same column first
-        if (aSameCol && !bSameCol) return -1;
-        if (!aSameCol && bSameCol) return 1;
+        if (isCorner) {
+          // Corner fan sorting:
+          // Order: left-of-node (shortest to longest vertical), then right-of-node (longest to shortest vertical)
+          // First tiebreaker: longest horizontal distance first
+          // Second tiebreaker: reversed for top vs bottom corners to avoid cyclical edge crossings
 
-        // If both same column or both different column, sort by rank diff (largest first)
-        if (aRankDiff !== bRankDiff) return bRankDiff - aRankDiff;
+          // Determine if connection goes to left or right of this node
+          const aIsLeft = aPlace.col <= thisPlace.col;
+          const bIsLeft = bPlace.col <= thisPlace.col;
 
-        // Then by column diff (largest first)
-        return bColDiff - aColDiff;
+          // Primary sort: left-of-node connections come before right-of-node
+          if (aIsLeft && !bIsLeft) return -1;
+          if (!aIsLeft && bIsLeft) return 1;
+
+          // Secondary sort: within left or right group, sort by vertical distance
+          // Left group: shortest first (ascending)
+          // Right group: longest first (descending)
+          if (aIsLeft) {
+            if (aRankDiff !== bRankDiff) return aRankDiff - bRankDiff;
+          } else {
+            if (aRankDiff !== bRankDiff) return bRankDiff - aRankDiff;
+          }
+
+          // First tiebreaker: longest horizontal distance first
+          if (aColDiff !== bColDiff) return bColDiff - aColDiff;
+
+          // Second tiebreaker: reversed for top vs bottom to prevent cyclical crossings
+          if (isBottomCorner) {
+            return a.idx - b.idx;
+          } else {
+            return b.idx - a.idx;
+          }
+        } else {
+          // Straight side sorting (top, bottom, left, right):
+          // Sort by position along the perpendicular axis so edges don't cross
+          if (side === 'top' || side === 'bottom') {
+            // Horizontal sides: sort by column position (left to right)
+            if (aPlace.col !== bPlace.col) return aPlace.col - bPlace.col;
+            // Tiebreaker: by row
+            return aPlace.row - bPlace.row;
+          } else {
+            // Vertical sides (left, right): sort by row position (top to bottom)
+            if (aPlace.row !== bPlace.row) return aPlace.row - bPlace.row;
+            // Tiebreaker: by column
+            return aPlace.col - bPlace.col;
+          }
+        }
       });
 
       const spacing = this.options.edgeSpacing;
