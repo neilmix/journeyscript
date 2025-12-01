@@ -176,6 +176,7 @@ export class JourneyVisualizer {
       step.style.position = 'absolute';
       step.style.left = `${x}px`;
       step.style.top = `${y}px`;
+      step.style.zIndex = '1';
     });
 
     const width = bounds.width + padding * 2;
@@ -200,7 +201,7 @@ export class JourneyVisualizer {
     svg.style.top = '0px';
     svg.style.left = '0px';
     svg.style.pointerEvents = 'none';
-    svg.style.zIndex = '10';
+    svg.style.zIndex = '0';
 
     // Create arrowhead marker definition
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');

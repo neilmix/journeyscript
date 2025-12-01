@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Corner Fan Sort Order Stress Test</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f0f0f0;
+    }
+    h1 {
+      text-align: center;
+      margin: 20px 0 10px;
+    }
+    .description {
+      text-align: center;
+      max-width: 900px;
+      margin: 0 auto 20px;
+      padding: 0 20px;
+      color: #666;
+      line-height: 1.5;
+    }
+    .journey-viewport {
+      width: 100vw;
+      height: calc(100vh - 150px);
+      overflow: hidden;
+      position: relative;
+      background: #fafafa;
+    }
+    .journey-container {
+      position: relative;
+    }
+    .step {
+      background: white;
+      border: 2px solid #333;
+      border-radius: 8px;
+      padding: 8px 12px;
+      min-width: 60px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    .step.center {
+      background: #e3f2fd;
+      border-color: #1976d2;
+      border-width: 3px;
+    }
+    .step.ring1 {
+      background: #fff3e0;
+      border-color: #e65100;
+    }
+    .step.ring2 {
+      background: #e8f5e9;
+      border-color: #2e7d32;
+    }
+    .step.ring3 {
+      background: #fce4ec;
+      border-color: #c2185b;
+    }
+    .step h3 {
+      margin: 0;
+      font-size: 12px;
+    }
+    .step p {
+      margin: 3px 0 0;
+      font-size: 10px;
+      color: #666;
+    }
+    .step button {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Corner Fan Sort Order Stress Test</h1>
+  <p class="description">
+    <strong>Test structure:</strong> Center node (blue) surrounded by 3 rings of nodes.
+    Center ↔ all nodes (two-way). Ring 1 (orange) ↔ Ring 2 (green) cyclically. Ring 2 ↔ Ring 3 (pink) cyclically.
+    <br>
+    This creates massive fan-outs at every corner to stress-test the sort algorithm.
+  </p>
+
+  <div class="journey-viewport" id="viewport">
+    <div class="journey-container">
+      <!-- CENTER NODE -->
+      <div class="step center" id="C">
+        <h3>CENTER</h3>
+        <p>Hub node</p>
+        <!-- Connect to all Ring 1 nodes -->
+        <button data-dest="R1-TL1">.</button>
+        <button data-dest="R1-TL2">.</button>
+        <button data-dest="R1-TL3">.</button>
+        <button data-dest="R1-T1">.</button>
+        <button data-dest="R1-T2">.</button>
+        <button data-dest="R1-T3">.</button>
+        <button data-dest="R1-TR1">.</button>
+        <button data-dest="R1-TR2">.</button>
+        <button data-dest="R1-TR3">.</button>
+        <button data-dest="R1-L1">.</button>
+        <button data-dest="R1-L2">.</button>
+        <button data-dest="R1-L3">.</button>
+        <button data-dest="R1-R1">.</button>
+        <button data-dest="R1-R2">.</button>
+        <button data-dest="R1-R3">.</button>
+        <button data-dest="R1-BL1">.</button>
+        <button data-dest="R1-BL2">.</button>
+        <button data-dest="R1-BL3">.</button>
+        <button data-dest="R1-B1">.</button>
+        <button data-dest="R1-B2">.</button>
+        <button data-dest="R1-B3">.</button>
+        <button data-dest="R1-BR1">.</button>
+        <button data-dest="R1-BR2">.</button>
+        <button data-dest="R1-BR3">.</button>
+      </div>
+
+      <!-- RING 1: Top-Left quadrant (3 nodes) -->
+      <div class="step ring1" id="R1-TL1">
+        <h3>R1-TL1</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-TL1">.</button>
+        <button data-dest="R2-TL2">.</button>
+        <button data-dest="R2-TL3">.</button>
+      </div>
+      <div class="step ring1" id="R1-TL2">
+        <h3>R1-TL2</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-TL1">.</button>
+        <button data-dest="R2-TL2">.</button>
+        <button data-dest="R2-TL3">.</button>
+      </div>
+      <div class="step ring1" id="R1-TL3">
+        <h3>R1-TL3</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-TL1">.</button>
+        <button data-dest="R2-TL2">.</button>
+        <button data-dest="R2-TL3">.</button>
+      </div>
+
+      <!-- RING 1: Top (3 nodes) -->
+      <div class="step ring1" id="R1-T1">
+        <h3>R1-T1</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-T1">.</button>
+        <button data-dest="R2-T2">.</button>
+        <button data-dest="R2-T3">.</button>
+      </div>
+      <div class="step ring1" id="R1-T2">
+        <h3>R1-T2</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-T1">.</button>
+        <button data-dest="R2-T2">.</button>
+        <button data-dest="R2-T3">.</button>
+      </div>
+      <div class="step ring1" id="R1-T3">
+        <h3>R1-T3</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-T1">.</button>
+        <button data-dest="R2-T2">.</button>
+        <button data-dest="R2-T3">.</button>
+      </div>
+
+      <!-- RING 1: Top-Right quadrant (3 nodes) -->
+      <div class="step ring1" id="R1-TR1">
+        <h3>R1-TR1</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-TR1">.</button>
+        <button data-dest="R2-TR2">.</button>
+        <button data-dest="R2-TR3">.</button>
+      </div>
+      <div class="step ring1" id="R1-TR2">
+        <h3>R1-TR2</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-TR1">.</button>
+        <button data-dest="R2-TR2">.</button>
+        <button data-dest="R2-TR3">.</button>
+      </div>
+      <div class="step ring1" id="R1-TR3">
+        <h3>R1-TR3</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-TR1">.</button>
+        <button data-dest="R2-TR2">.</button>
+        <button data-dest="R2-TR3">.</button>
+      </div>
+
+      <!-- RING 1: Left (3 nodes) -->
+      <div class="step ring1" id="R1-L1">
+        <h3>R1-L1</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-L1">.</button>
+        <button data-dest="R2-L2">.</button>
+        <button data-dest="R2-L3">.</button>
+      </div>
+      <div class="step ring1" id="R1-L2">
+        <h3>R1-L2</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-L1">.</button>
+        <button data-dest="R2-L2">.</button>
+        <button data-dest="R2-L3">.</button>
+      </div>
+      <div class="step ring1" id="R1-L3">
+        <h3>R1-L3</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-L1">.</button>
+        <button data-dest="R2-L2">.</button>
+        <button data-dest="R2-L3">.</button>
+      </div>
+
+      <!-- RING 1: Right (3 nodes) -->
+      <div class="step ring1" id="R1-R1">
+        <h3>R1-R1</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-R1">.</button>
+        <button data-dest="R2-R2">.</button>
+        <button data-dest="R2-R3">.</button>
+      </div>
+      <div class="step ring1" id="R1-R2">
+        <h3>R1-R2</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-R1">.</button>
+        <button data-dest="R2-R2">.</button>
+        <button data-dest="R2-R3">.</button>
+      </div>
+      <div class="step ring1" id="R1-R3">
+        <h3>R1-R3</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-R1">.</button>
+        <button data-dest="R2-R2">.</button>
+        <button data-dest="R2-R3">.</button>
+      </div>
+
+      <!-- RING 1: Bottom-Left quadrant (3 nodes) -->
+      <div class="step ring1" id="R1-BL1">
+        <h3>R1-BL1</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-BL1">.</button>
+        <button data-dest="R2-BL2">.</button>
+        <button data-dest="R2-BL3">.</button>
+      </div>
+      <div class="step ring1" id="R1-BL2">
+        <h3>R1-BL2</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-BL1">.</button>
+        <button data-dest="R2-BL2">.</button>
+        <button data-dest="R2-BL3">.</button>
+      </div>
+      <div class="step ring1" id="R1-BL3">
+        <h3>R1-BL3</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-BL1">.</button>
+        <button data-dest="R2-BL2">.</button>
+        <button data-dest="R2-BL3">.</button>
+      </div>
+
+      <!-- RING 1: Bottom (3 nodes) -->
+      <div class="step ring1" id="R1-B1">
+        <h3>R1-B1</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-B1">.</button>
+        <button data-dest="R2-B2">.</button>
+        <button data-dest="R2-B3">.</button>
+      </div>
+      <div class="step ring1" id="R1-B2">
+        <h3>R1-B2</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-B1">.</button>
+        <button data-dest="R2-B2">.</button>
+        <button data-dest="R2-B3">.</button>
+      </div>
+      <div class="step ring1" id="R1-B3">
+        <h3>R1-B3</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-B1">.</button>
+        <button data-dest="R2-B2">.</button>
+        <button data-dest="R2-B3">.</button>
+      </div>
+
+      <!-- RING 1: Bottom-Right quadrant (3 nodes) -->
+      <div class="step ring1" id="R1-BR1">
+        <h3>R1-BR1</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-BR1">.</button>
+        <button data-dest="R2-BR2">.</button>
+        <button data-dest="R2-BR3">.</button>
+      </div>
+      <div class="step ring1" id="R1-BR2">
+        <h3>R1-BR2</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-BR1">.</button>
+        <button data-dest="R2-BR2">.</button>
+        <button data-dest="R2-BR3">.</button>
+      </div>
+      <div class="step ring1" id="R1-BR3">
+        <h3>R1-BR3</h3>
+        <button data-dest="C">C</button>
+        <button data-dest="R2-BR1">.</button>
+        <button data-dest="R2-BR2">.</button>
+        <button data-dest="R2-BR3">.</button>
+      </div>
+
+      <!-- RING 2: Top-Left quadrant (3 nodes) -->
+      <div class="step ring2" id="R2-TL1">
+        <h3>R2-TL1</h3>
+        <button data-dest="R1-TL1">.</button>
+        <button data-dest="R1-TL2">.</button>
+        <button data-dest="R1-TL3">.</button>
+        <button data-dest="R3-TL1">.</button>
+        <button data-dest="R3-TL2">.</button>
+        <button data-dest="R3-TL3">.</button>
+      </div>
+      <div class="step ring2" id="R2-TL2">
+        <h3>R2-TL2</h3>
+        <button data-dest="R1-TL1">.</button>
+        <button data-dest="R1-TL2">.</button>
+        <button data-dest="R1-TL3">.</button>
+        <button data-dest="R3-TL1">.</button>
+        <button data-dest="R3-TL2">.</button>
+        <button data-dest="R3-TL3">.</button>
+      </div>
+      <div class="step ring2" id="R2-TL3">
+        <h3>R2-TL3</h3>
+        <button data-dest="R1-TL1">.</button>
+        <button data-dest="R1-TL2">.</button>
+        <button data-dest="R1-TL3">.</button>
+        <button data-dest="R3-TL1">.</button>
+        <button data-dest="R3-TL2">.</button>
+        <button data-dest="R3-TL3">.</button>
+      </div>
+
+      <!-- RING 2: Top (3 nodes) -->
+      <div class="step ring2" id="R2-T1">
+        <h3>R2-T1</h3>
+        <button data-dest="R1-T1">.</button>
+        <button data-dest="R1-T2">.</button>
+        <button data-dest="R1-T3">.</button>
+        <button data-dest="R3-T1">.</button>
+        <button data-dest="R3-T2">.</button>
+        <button data-dest="R3-T3">.</button>
+      </div>
+      <div class="step ring2" id="R2-T2">
+        <h3>R2-T2</h3>
+        <button data-dest="R1-T1">.</button>
+        <button data-dest="R1-T2">.</button>
+        <button data-dest="R1-T3">.</button>
+        <button data-dest="R3-T1">.</button>
+        <button data-dest="R3-T2">.</button>
+        <button data-dest="R3-T3">.</button>
+      </div>
+      <div class="step ring2" id="R2-T3">
+        <h3>R2-T3</h3>
+        <button data-dest="R1-T1">.</button>
+        <button data-dest="R1-T2">.</button>
+        <button data-dest="R1-T3">.</button>
+        <button data-dest="R3-T1">.</button>
+        <button data-dest="R3-T2">.</button>
+        <button data-dest="R3-T3">.</button>
+      </div>
+
+      <!-- RING 2: Top-Right quadrant (3 nodes) -->
+      <div class="step ring2" id="R2-TR1">
+        <h3>R2-TR1</h3>
+        <button data-dest="R1-TR1">.</button>
+        <button data-dest="R1-TR2">.</button>
+        <button data-dest="R1-TR3">.</button>
+        <button data-dest="R3-TR1">.</button>
+        <button data-dest="R3-TR2">.</button>
+        <button data-dest="R3-TR3">.</button>
+      </div>
+      <div class="step ring2" id="R2-TR2">
+        <h3>R2-TR2</h3>
+        <button data-dest="R1-TR1">.</button>
+        <button data-dest="R1-TR2">.</button>
+        <button data-dest="R1-TR3">.</button>
+        <button data-dest="R3-TR1">.</button>
+        <button data-dest="R3-TR2">.</button>
+        <button data-dest="R3-TR3">.</button>
+      </div>
+      <div class="step ring2" id="R2-TR3">
+        <h3>R2-TR3</h3>
+        <button data-dest="R1-TR1">.</button>
+        <button data-dest="R1-TR2">.</button>
+        <button data-dest="R1-TR3">.</button>
+        <button data-dest="R3-TR1">.</button>
+        <button data-dest="R3-TR2">.</button>
+        <button data-dest="R3-TR3">.</button>
+      </div>
+
+      <!-- RING 2: Left (3 nodes) -->
+      <div class="step ring2" id="R2-L1">
+        <h3>R2-L1</h3>
+        <button data-dest="R1-L1">.</button>
+        <button data-dest="R1-L2">.</button>
+        <button data-dest="R1-L3">.</button>
+        <button data-dest="R3-L1">.</button>
+        <button data-dest="R3-L2">.</button>
+        <button data-dest="R3-L3">.</button>
+      </div>
+      <div class="step ring2" id="R2-L2">
+        <h3>R2-L2</h3>
+        <button data-dest="R1-L1">.</button>
+        <button data-dest="R1-L2">.</button>
+        <button data-dest="R1-L3">.</button>
+        <button data-dest="R3-L1">.</button>
+        <button data-dest="R3-L2">.</button>
+        <button data-dest="R3-L3">.</button>
+      </div>
+      <div class="step ring2" id="R2-L3">
+        <h3>R2-L3</h3>
+        <button data-dest="R1-L1">.</button>
+        <button data-dest="R1-L2">.</button>
+        <button data-dest="R1-L3">.</button>
+        <button data-dest="R3-L1">.</button>
+        <button data-dest="R3-L2">.</button>
+        <button data-dest="R3-L3">.</button>
+      </div>
+
+      <!-- RING 2: Right (3 nodes) -->
+      <div class="step ring2" id="R2-R1">
+        <h3>R2-R1</h3>
+        <button data-dest="R1-R1">.</button>
+        <button data-dest="R1-R2">.</button>
+        <button data-dest="R1-R3">.</button>
+        <button data-dest="R3-R1">.</button>
+        <button data-dest="R3-R2">.</button>
+        <button data-dest="R3-R3">.</button>
+      </div>
+      <div class="step ring2" id="R2-R2">
+        <h3>R2-R2</h3>
+        <button data-dest="R1-R1">.</button>
+        <button data-dest="R1-R2">.</button>
+        <button data-dest="R1-R3">.</button>
+        <button data-dest="R3-R1">.</button>
+        <button data-dest="R3-R2">.</button>
+        <button data-dest="R3-R3">.</button>
+      </div>
+      <div class="step ring2" id="R2-R3">
+        <h3>R2-R3</h3>
+        <button data-dest="R1-R1">.</button>
+        <button data-dest="R1-R2">.</button>
+        <button data-dest="R1-R3">.</button>
+        <button data-dest="R3-R1">.</button>
+        <button data-dest="R3-R2">.</button>
+        <button data-dest="R3-R3">.</button>
+      </div>
+
+      <!-- RING 2: Bottom-Left quadrant (3 nodes) -->
+      <div class="step ring2" id="R2-BL1">
+        <h3>R2-BL1</h3>
+        <button data-dest="R1-BL1">.</button>
+        <button data-dest="R1-BL2">.</button>
+        <button data-dest="R1-BL3">.</button>
+        <button data-dest="R3-BL1">.</button>
+        <button data-dest="R3-BL2">.</button>
+        <button data-dest="R3-BL3">.</button>
+      </div>
+      <div class="step ring2" id="R2-BL2">
+        <h3>R2-BL2</h3>
+        <button data-dest="R1-BL1">.</button>
+        <button data-dest="R1-BL2">.</button>
+        <button data-dest="R1-BL3">.</button>
+        <button data-dest="R3-BL1">.</button>
+        <button data-dest="R3-BL2">.</button>
+        <button data-dest="R3-BL3">.</button>
+      </div>
+      <div class="step ring2" id="R2-BL3">
+        <h3>R2-BL3</h3>
+        <button data-dest="R1-BL1">.</button>
+        <button data-dest="R1-BL2">.</button>
+        <button data-dest="R1-BL3">.</button>
+        <button data-dest="R3-BL1">.</button>
+        <button data-dest="R3-BL2">.</button>
+        <button data-dest="R3-BL3">.</button>
+      </div>
+
+      <!-- RING 2: Bottom (3 nodes) -->
+      <div class="step ring2" id="R2-B1">
+        <h3>R2-B1</h3>
+        <button data-dest="R1-B1">.</button>
+        <button data-dest="R1-B2">.</button>
+        <button data-dest="R1-B3">.</button>
+        <button data-dest="R3-B1">.</button>
+        <button data-dest="R3-B2">.</button>
+        <button data-dest="R3-B3">.</button>
+      </div>
+      <div class="step ring2" id="R2-B2">
+        <h3>R2-B2</h3>
+        <button data-dest="R1-B1">.</button>
+        <button data-dest="R1-B2">.</button>
+        <button data-dest="R1-B3">.</button>
+        <button data-dest="R3-B1">.</button>
+        <button data-dest="R3-B2">.</button>
+        <button data-dest="R3-B3">.</button>
+      </div>
+      <div class="step ring2" id="R2-B3">
+        <h3>R2-B3</h3>
+        <button data-dest="R1-B1">.</button>
+        <button data-dest="R1-B2">.</button>
+        <button data-dest="R1-B3">.</button>
+        <button data-dest="R3-B1">.</button>
+        <button data-dest="R3-B2">.</button>
+        <button data-dest="R3-B3">.</button>
+      </div>
+
+      <!-- RING 2: Bottom-Right quadrant (3 nodes) -->
+      <div class="step ring2" id="R2-BR1">
+        <h3>R2-BR1</h3>
+        <button data-dest="R1-BR1">.</button>
+        <button data-dest="R1-BR2">.</button>
+        <button data-dest="R1-BR3">.</button>
+        <button data-dest="R3-BR1">.</button>
+        <button data-dest="R3-BR2">.</button>
+        <button data-dest="R3-BR3">.</button>
+      </div>
+      <div class="step ring2" id="R2-BR2">
+        <h3>R2-BR2</h3>
+        <button data-dest="R1-BR1">.</button>
+        <button data-dest="R1-BR2">.</button>
+        <button data-dest="R1-BR3">.</button>
+        <button data-dest="R3-BR1">.</button>
+        <button data-dest="R3-BR2">.</button>
+        <button data-dest="R3-BR3">.</button>
+      </div>
+      <div class="step ring2" id="R2-BR3">
+        <h3>R2-BR3</h3>
+        <button data-dest="R1-BR1">.</button>
+        <button data-dest="R1-BR2">.</button>
+        <button data-dest="R1-BR3">.</button>
+        <button data-dest="R3-BR1">.</button>
+        <button data-dest="R3-BR2">.</button>
+        <button data-dest="R3-BR3">.</button>
+      </div>
+
+      <!-- RING 3: Top-Left quadrant (3 nodes) -->
+      <div class="step ring3" id="R3-TL1">
+        <h3>R3-TL1</h3>
+        <button data-dest="R2-TL1">.</button>
+        <button data-dest="R2-TL2">.</button>
+        <button data-dest="R2-TL3">.</button>
+      </div>
+      <div class="step ring3" id="R3-TL2">
+        <h3>R3-TL2</h3>
+        <button data-dest="R2-TL1">.</button>
+        <button data-dest="R2-TL2">.</button>
+        <button data-dest="R2-TL3">.</button>
+      </div>
+      <div class="step ring3" id="R3-TL3">
+        <h3>R3-TL3</h3>
+        <button data-dest="R2-TL1">.</button>
+        <button data-dest="R2-TL2">.</button>
+        <button data-dest="R2-TL3">.</button>
+      </div>
+
+      <!-- RING 3: Top (3 nodes) -->
+      <div class="step ring3" id="R3-T1">
+        <h3>R3-T1</h3>
+        <button data-dest="R2-T1">.</button>
+        <button data-dest="R2-T2">.</button>
+        <button data-dest="R2-T3">.</button>
+      </div>
+      <div class="step ring3" id="R3-T2">
+        <h3>R3-T2</h3>
+        <button data-dest="R2-T1">.</button>
+        <button data-dest="R2-T2">.</button>
+        <button data-dest="R2-T3">.</button>
+      </div>
+      <div class="step ring3" id="R3-T3">
+        <h3>R3-T3</h3>
+        <button data-dest="R2-T1">.</button>
+        <button data-dest="R2-T2">.</button>
+        <button data-dest="R2-T3">.</button>
+      </div>
+
+      <!-- RING 3: Top-Right quadrant (3 nodes) -->
+      <div class="step ring3" id="R3-TR1">
+        <h3>R3-TR1</h3>
+        <button data-dest="R2-TR1">.</button>
+        <button data-dest="R2-TR2">.</button>
+        <button data-dest="R2-TR3">.</button>
+      </div>
+      <div class="step ring3" id="R3-TR2">
+        <h3>R3-TR2</h3>
+        <button data-dest="R2-TR1">.</button>
+        <button data-dest="R2-TR2">.</button>
+        <button data-dest="R2-TR3">.</button>
+      </div>
+      <div class="step ring3" id="R3-TR3">
+        <h3>R3-TR3</h3>
+        <button data-dest="R2-TR1">.</button>
+        <button data-dest="R2-TR2">.</button>
+        <button data-dest="R2-TR3">.</button>
+      </div>
+
+      <!-- RING 3: Left (3 nodes) -->
+      <div class="step ring3" id="R3-L1">
+        <h3>R3-L1</h3>
+        <button data-dest="R2-L1">.</button>
+        <button data-dest="R2-L2">.</button>
+        <button data-dest="R2-L3">.</button>
+      </div>
+      <div class="step ring3" id="R3-L2">
+        <h3>R3-L2</h3>
+        <button data-dest="R2-L1">.</button>
+        <button data-dest="R2-L2">.</button>
+        <button data-dest="R2-L3">.</button>
+      </div>
+      <div class="step ring3" id="R3-L3">
+        <h3>R3-L3</h3>
+        <button data-dest="R2-L1">.</button>
+        <button data-dest="R2-L2">.</button>
+        <button data-dest="R2-L3">.</button>
+      </div>
+
+      <!-- RING 3: Right (3 nodes) -->
+      <div class="step ring3" id="R3-R1">
+        <h3>R3-R1</h3>
+        <button data-dest="R2-R1">.</button>
+        <button data-dest="R2-R2">.</button>
+        <button data-dest="R2-R3">.</button>
+      </div>
+      <div class="step ring3" id="R3-R2">
+        <h3>R3-R2</h3>
+        <button data-dest="R2-R1">.</button>
+        <button data-dest="R2-R2">.</button>
+        <button data-dest="R2-R3">.</button>
+      </div>
+      <div class="step ring3" id="R3-R3">
+        <h3>R3-R3</h3>
+        <button data-dest="R2-R1">.</button>
+        <button data-dest="R2-R2">.</button>
+        <button data-dest="R2-R3">.</button>
+      </div>
+
+      <!-- RING 3: Bottom-Left quadrant (3 nodes) -->
+      <div class="step ring3" id="R3-BL1">
+        <h3>R3-BL1</h3>
+        <button data-dest="R2-BL1">.</button>
+        <button data-dest="R2-BL2">.</button>
+        <button data-dest="R2-BL3">.</button>
+      </div>
+      <div class="step ring3" id="R3-BL2">
+        <h3>R3-BL2</h3>
+        <button data-dest="R2-BL1">.</button>
+        <button data-dest="R2-BL2">.</button>
+        <button data-dest="R2-BL3">.</button>
+      </div>
+      <div class="step ring3" id="R3-BL3">
+        <h3>R3-BL3</h3>
+        <button data-dest="R2-BL1">.</button>
+        <button data-dest="R2-BL2">.</button>
+        <button data-dest="R2-BL3">.</button>
+      </div>
+
+      <!-- RING 3: Bottom (3 nodes) -->
+      <div class="step ring3" id="R3-B1">
+        <h3>R3-B1</h3>
+        <button data-dest="R2-B1">.</button>
+        <button data-dest="R2-B2">.</button>
+        <button data-dest="R2-B3">.</button>
+      </div>
+      <div class="step ring3" id="R3-B2">
+        <h3>R3-B2</h3>
+        <button data-dest="R2-B1">.</button>
+        <button data-dest="R2-B2">.</button>
+        <button data-dest="R2-B3">.</button>
+      </div>
+      <div class="step ring3" id="R3-B3">
+        <h3>R3-B3</h3>
+        <button data-dest="R2-B1">.</button>
+        <button data-dest="R2-B2">.</button>
+        <button data-dest="R2-B3">.</button>
+      </div>
+
+      <!-- RING 3: Bottom-Right quadrant (3 nodes) -->
+      <div class="step ring3" id="R3-BR1">
+        <h3>R3-BR1</h3>
+        <button data-dest="R2-BR1">.</button>
+        <button data-dest="R2-BR2">.</button>
+        <button data-dest="R2-BR3">.</button>
+      </div>
+      <div class="step ring3" id="R3-BR2">
+        <h3>R3-BR2</h3>
+        <button data-dest="R2-BR1">.</button>
+        <button data-dest="R2-BR2">.</button>
+        <button data-dest="R2-BR3">.</button>
+      </div>
+      <div class="step ring3" id="R3-BR3">
+        <h3>R3-BR3</h3>
+        <button data-dest="R2-BR1">.</button>
+        <button data-dest="R2-BR2">.</button>
+        <button data-dest="R2-BR3">.</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JourneyVisualizer } from '../dist/journey-visualizer.js';
+
+    try {
+      const viz = new JourneyVisualizer('#viewport .journey-container', {
+        layout: {
+          edgeSpacing: 12,
+          gutterMargin: 25,
+          rankSep: 100,
+          nodeSep: 120,
+        }
+      });
+      viz.init();
+      console.log('Initialized with', document.querySelectorAll('.step').length, 'nodes');
+    } catch (e) {
+      console.error('Error initializing:', e);
+    }
+  </script>
+</body>
+</html>

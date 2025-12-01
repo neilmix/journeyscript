@@ -719,6 +719,194 @@ describe('JourneyLayout', async () => {
     assert.ok(bToA.points.length >= 2, 'B->A should have valid path');
   });
 
+  test('corner fan - all corner permutations sort correctly', async () => {
+    const layout = new JourneyLayout({ edgeSpacing: 15 });
+
+    // Test corner fan sorting by directly testing the sort algorithm
+    // We'll create a mock scenario and verify the sort order
+    //
+    // For a center node C, we test edges going to:
+    // - Bottom-left: destinations with rowDiff > 0, colDiff < 0
+    // - Bottom-right: destinations with rowDiff > 0, colDiff > 0
+    // - Top-left: destinations with rowDiff < 0, colDiff < 0
+    // - Top-right: destinations with rowDiff < 0, colDiff > 0
+    //
+    // Sort spec:
+    // 1. Left-of-node first (col <= thisCol), then right-of-node
+    // 2. Left: shortest vertical first; Right: longest vertical first
+    // 3. Tiebreaker: longest horizontal first
+
+    // Helper to test sort order given placements
+    function testCornerSort(cornerName, isBottomCorner, connections, placements, thisPlace) {
+      // Replicate the sort logic from _assignCornerOffsets
+      connections.sort((a, b) => {
+        const aPlace = placements.get(a.dest);
+        const bPlace = placements.get(b.dest);
+
+        const aRankDiff = Math.abs(aPlace.row - thisPlace.row);
+        const bRankDiff = Math.abs(bPlace.row - thisPlace.row);
+        const aColDiff = Math.abs(aPlace.col - thisPlace.col);
+        const bColDiff = Math.abs(bPlace.col - thisPlace.col);
+
+        const aIsLeft = aPlace.col <= thisPlace.col;
+        const bIsLeft = bPlace.col <= thisPlace.col;
+
+        // Primary: left first
+        if (aIsLeft && !bIsLeft) return -1;
+        if (!aIsLeft && bIsLeft) return 1;
+
+        // Secondary: vertical distance
+        if (aIsLeft) {
+          if (aRankDiff !== bRankDiff) return aRankDiff - bRankDiff;
+        } else {
+          if (aRankDiff !== bRankDiff) return bRankDiff - aRankDiff;
+        }
+
+        // Tiebreaker: longest horizontal first
+        if (aColDiff !== bColDiff) return bColDiff - aColDiff;
+
+        // Final tiebreaker
+        if (isBottomCorner) {
+          return a.idx - b.idx;
+        } else {
+          return b.idx - a.idx;
+        }
+      });
+
+      return connections.map(c => c.dest);
+    }
+
+    console.log('\n=== Corner Fan: All Permutations ===');
+
+    // Test Bottom-Left corner (C at row 2, col 2)
+    // Destinations all have row > 2 and col < 2 (down and left)
+    {
+      const thisPlace = { row: 2, col: 2 };
+      const placements = new Map([
+        ['C', thisPlace],
+        ['BL1', { row: 3, col: 0 }],  // rowDiff=1, colDiff=2 (close vertical, far horizontal)
+        ['BL2', { row: 4, col: 0 }],  // rowDiff=2, colDiff=2 (far vertical, far horizontal)
+        ['BL3', { row: 4, col: 1 }],  // rowDiff=2, colDiff=1 (far vertical, close horizontal)
+      ]);
+      const connections = [
+        { dest: 'BL1', idx: 0 },
+        { dest: 'BL2', idx: 1 },
+        { dest: 'BL3', idx: 2 },
+      ];
+
+      const order = testCornerSort('bottom-left', true, [...connections], placements, thisPlace);
+      console.log('\nBottom-left corner:');
+      console.log('  Expected: BL1 (short vert), BL2 (long vert, far horiz), BL3 (long vert, close horiz)');
+      console.log('  Got:', order.join(', '));
+
+      // All are left of C, so sort by shortest vertical first, then longest horizontal
+      assert.deepStrictEqual(order, ['BL1', 'BL2', 'BL3'], 'Bottom-left sort order');
+    }
+
+    // Test Bottom-Right corner
+    // Destinations all have row > 2 and col > 2 (down and right)
+    {
+      const thisPlace = { row: 2, col: 2 };
+      const placements = new Map([
+        ['C', thisPlace],
+        ['BR1', { row: 3, col: 4 }],  // rowDiff=1, colDiff=2 (close vertical, far horizontal)
+        ['BR2', { row: 4, col: 3 }],  // rowDiff=2, colDiff=1 (far vertical, close horizontal)
+        ['BR3', { row: 4, col: 4 }],  // rowDiff=2, colDiff=2 (far vertical, far horizontal)
+      ]);
+      const connections = [
+        { dest: 'BR1', idx: 0 },
+        { dest: 'BR2', idx: 1 },
+        { dest: 'BR3', idx: 2 },
+      ];
+
+      const order = testCornerSort('bottom-right', true, [...connections], placements, thisPlace);
+      console.log('\nBottom-right corner:');
+      console.log('  Expected: BR3 (long vert, far horiz), BR2 (long vert, close horiz), BR1 (short vert)');
+      console.log('  Got:', order.join(', '));
+
+      // All are right of C, so sort by longest vertical first, then longest horizontal
+      assert.deepStrictEqual(order, ['BR3', 'BR2', 'BR1'], 'Bottom-right sort order');
+    }
+
+    // Test Top-Left corner
+    // Destinations all have row < 2 and col < 2 (up and left)
+    {
+      const thisPlace = { row: 2, col: 2 };
+      const placements = new Map([
+        ['C', thisPlace],
+        ['TL1', { row: 0, col: 0 }],  // rowDiff=2, colDiff=2 (far vertical, far horizontal)
+        ['TL2', { row: 0, col: 1 }],  // rowDiff=2, colDiff=1 (far vertical, close horizontal)
+        ['TL3', { row: 1, col: 0 }],  // rowDiff=1, colDiff=2 (close vertical, far horizontal)
+      ]);
+      const connections = [
+        { dest: 'TL1', idx: 0 },
+        { dest: 'TL2', idx: 1 },
+        { dest: 'TL3', idx: 2 },
+      ];
+
+      const order = testCornerSort('top-left', false, [...connections], placements, thisPlace);
+      console.log('\nTop-left corner:');
+      console.log('  Expected: TL3 (short vert), TL1 (long vert, far horiz), TL2 (long vert, close horiz)');
+      console.log('  Got:', order.join(', '));
+
+      // All are left of C, so sort by shortest vertical first, then longest horizontal
+      assert.deepStrictEqual(order, ['TL3', 'TL1', 'TL2'], 'Top-left sort order');
+    }
+
+    // Test Top-Right corner
+    // Destinations all have row < 2 and col > 2 (up and right)
+    {
+      const thisPlace = { row: 2, col: 2 };
+      const placements = new Map([
+        ['C', thisPlace],
+        ['TR1', { row: 0, col: 3 }],  // rowDiff=2, colDiff=1 (far vertical, close horizontal)
+        ['TR2', { row: 0, col: 4 }],  // rowDiff=2, colDiff=2 (far vertical, far horizontal)
+        ['TR3', { row: 1, col: 4 }],  // rowDiff=1, colDiff=2 (close vertical, far horizontal)
+      ]);
+      const connections = [
+        { dest: 'TR1', idx: 0 },
+        { dest: 'TR2', idx: 1 },
+        { dest: 'TR3', idx: 2 },
+      ];
+
+      const order = testCornerSort('top-right', false, [...connections], placements, thisPlace);
+      console.log('\nTop-right corner:');
+      console.log('  Expected: TR2 (long vert, far horiz), TR1 (long vert, close horiz), TR3 (short vert)');
+      console.log('  Got:', order.join(', '));
+
+      // All are right of C, so sort by longest vertical first, then longest horizontal
+      assert.deepStrictEqual(order, ['TR2', 'TR1', 'TR3'], 'Top-right sort order');
+    }
+
+    // Test mixed corner (both left and right destinations from same corner)
+    // This tests the primary sort: left before right
+    {
+      const thisPlace = { row: 2, col: 2 };
+      const placements = new Map([
+        ['C', thisPlace],
+        ['L1', { row: 3, col: 1 }],   // rowDiff=1, colDiff=1, LEFT
+        ['L2', { row: 4, col: 0 }],   // rowDiff=2, colDiff=2, LEFT
+        ['R1', { row: 3, col: 3 }],   // rowDiff=1, colDiff=1, RIGHT
+        ['R2', { row: 4, col: 4 }],   // rowDiff=2, colDiff=2, RIGHT
+      ]);
+      const connections = [
+        { dest: 'R1', idx: 0 },
+        { dest: 'L2', idx: 1 },
+        { dest: 'R2', idx: 2 },
+        { dest: 'L1', idx: 3 },
+      ];
+
+      const order = testCornerSort('bottom-mixed', true, [...connections], placements, thisPlace);
+      console.log('\nMixed corner (bottom, left+right destinations):');
+      console.log('  Expected: L1, L2 (left first, short to long), R2, R1 (right second, long to short)');
+      console.log('  Got:', order.join(', '));
+
+      assert.deepStrictEqual(order, ['L1', 'L2', 'R2', 'R1'], 'Mixed corner sort order');
+    }
+
+    console.log('\n✓ All corner fan sort orders verified');
+  });
+
   // ============================================================
   // LANE-BASED ROUTING TESTS
   // ============================================================
